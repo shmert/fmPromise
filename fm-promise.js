@@ -60,7 +60,7 @@ const fmPromise = function () {
 		/**
 		 * Performs a FileMaker script, returning a Promise. The Promise will be resolved with parsed JSON if possible, or rejected if the FileMaker script result starts with the word "ERROR".
 		 * @return {Promise} which will be resolved / rejected by the `scriptName` being called
-		 * @param scriptName FileMaker script to perform
+		 * @param scriptName:string FileMaker script to perform
 		 * @param scriptParameter optional parameter to pass to the script
 		 */
 		performScript(scriptName, scriptParameter) {
@@ -93,8 +93,8 @@ const fmPromise = function () {
 
 		/**
 		 * Evaluate an expression in FileMaker using optional letVars. This is also a handy way to set $$GLOBAL variables.
-		 * @param exp calculation to evaluate
-		 * @param letVars key/value pairs which may be used in <code>exp</code>
+		 * @param exp:string calculation to evaluate
+		 * @param letVars:object key/value pairs which may be used in <code>exp</code>
 		 * @return {Promise} containing the evaluated result
 		 */
 		evaluate(exp, letVars = {}) {
@@ -105,9 +105,28 @@ const fmPromise = function () {
 		},
 
 		/**
+		 * Execute a FileMaker Data API call with the given parameter.
+		 * @param {{layouts: string, layout.response:undefined|string, action: 'metaData'|'read'|undefined, limit: number|undefined, offset:undefined|number, query:undefined|{omit:undefined|'true'}[], sort:undefined|{fieldName:string,sortOrder:'ascend'|'descend'|undefined}[], portal:undefined|string[]}} param the data API call parameter JSON
+		 * @return {Promise<{layouts:undefined|[{name:string,table:string}], fieldMetaData:undefined|[{}], portalMetaData:undefined|[{}], valueLists:undefined|[{}] dataInfo:undefined|{database:string, layout:string, table:string, totalRecordCount:number, foundCount:number, returnedCount:number}, data:undefined|[{fieldData:{}, portalData:{}, portalDataInfo:[{}]}]}>}
+		 */
+		executeFileMakerDataAPI(param) {
+			return this.performScript('fmPromise.executeFileMakerDataAPI', param)
+				.then((result) => {
+					// do error-checking on the data API result here instead of in FileMaker, as JSON parsing for large payloads is faster
+					if (!result || !result.messages || !result.messages.length) {
+						throw 'Empty data API response';
+					} else if (result.messages[0].code !== '0') {
+						throw result.messages[0];
+					} else {
+						return result.response;
+					}
+				});
+		},
+
+		/**
 		 * Executes a SQL command with placeholders, parsing the plain-text delimited result into an array of arrays.
-		 * @param sql
-		 * @param bindings
+		 * @param sql:string
+		 * @param bindings:{}
 		 * @return {Promise<Array<Array<String>>>}
 		 */
 		executeSql(sql, ...bindings) {
@@ -121,8 +140,8 @@ const fmPromise = function () {
 
 		/**
 		 * Inserts from URL without worrying about cross-site scripting limitations imposed on the web viewer
-		 * @param url URL to fetch/post to
-		 * @param curlOptions @see https://fmhelp.filemaker.com/help/18/fmp/en/index.html#page/FMP_Help/curl-options.html
+		 * @param url:string URL to fetch/post to
+		 * @param curlOptions:string @see https://fmhelp.filemaker.com/help/18/fmp/en/index.html#page/FMP_Help/curl-options.html
 		 * @return {Promise<string>} the response body. If you need headers, consider writing a custom FileMaker script.
 		 */
 		insertFromUrl(url, curlOptions) {
@@ -131,7 +150,7 @@ const fmPromise = function () {
 
 		/**
 		 * Sets a field by name in FileMaker.
-		 * @param fmFieldNameToSet The name of the field, optionally fully qualified
+		 * @param fmFieldNameToSet:string The name of the field, optionally fully qualified
 		 * @param value
 		 * @return {Promise}
 		 */
@@ -140,25 +159,25 @@ const fmPromise = function () {
 		},
 
 		/**
-		 * Shows a dialog in FileMaker, and returns the zero-based index of the button chosen
-		 * @param title
-		 * @param body
-		 * @param btn0
-		 * @param btn1
-		 * @param btn2
+		 * Shows a dialog in FileMaker, and returns the (one-based!) index of the button chosen
+		 * @param title:string
+		 * @param body:string
+		 * @param btn1:string
+		 * @param btn2:string
+		 * @param btn3:string
 		 * @return {Promise<number>}
 		 */
-		showCustomDialog(title, body, btn0, btn1, btn2) {
-			return this.performScript('fmPromise.showCustomDialog', {title, body, btn0, btn1, btn2})
+		showCustomDialog(title, body, btn1, btn2, btn3) {
+			return this.performScript('fmPromise.showCustomDialog', {title, body, btn1, btn2, btn3})
 				.then(function(chosenMessage) {
 					// noinspection JSCheckFunctionSignatures
-					return parseInt(chosenMessage) - 1;
+					return parseInt(chosenMessage);
 				});
 		},
 
 		/**
 		 * Private method called by FileMaker to provide a result for a script call.
-		 * @return boolean whether there was a pending promise with this id
+		 * @return {boolean} whether there was a pending promise with this id
 		 */
 		_resolve(promiseId, result) {
 			console.log('Got resolve for promiseId ' + promiseId + ' with ' + result.length + ' characters');
@@ -168,7 +187,7 @@ const fmPromise = function () {
 
 		/**
 		 * Private method called by FileMaker to provide an error cause for a script call.
-		 * @return boolean whether there was a pending promise with this id
+		 * @return {boolean} whether there was a pending promise with this id
 		 */
 		_reject(promiseId, error) {
 			console.log('Got reject for promiseId ' + promiseId + ': ' + error);
@@ -178,6 +197,7 @@ const fmPromise = function () {
 
 		/**
 		 * The default <code>webViewerName</code> is "fmPromiseWebViewer". This corresponds to the webViewer layout object by FileMaker to call back into JavaScript.
+		 * @param s:string
 		 */
 		setWebViewerName(s) {
 			webViewerName = s;
