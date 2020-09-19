@@ -72,6 +72,29 @@ async function submitMyOrder(orderDetails) {
 }
 ```
 
+### Debugging
+I would *strongly* recommend you enable external JavaScript debugging in your web viewer, as described [here](https://community.claris.com/en/s/question/0D50H00007uvYTVSA2/enable-inspect-element-with-right-click-in-webviewer-)
+
+From your terminal, type:
+```
+defaults write com.FileMaker.client.pro12 WebKitDebugDeveloperExtrasEnabled -bool YES
+```
+
+This allows you to utilize Safari's developer tools on your web viewer code, which is incredibly useful.
+
+### Packaging
+The FMPromise Add-On workflow is: 
+1. Create a new module, which writes my-module.html to your `Documents/fmPromise/` directory.
+2. Edit this file and preview it in `$$FMPROMISE_DEVMODE`
+3. Once satisfied, package the module into the `fmPromiseModule` table
+
+This packaging step gets the source of your .html file, and optionally inlines any external JavaScript / CSS files.
+
+If you want to change the inline behavior of a script or style, add a `data-package` attribute to your <script> or <link> tag containing your JavaScript / CSS.
+
+* `data-package="omit"` will remove the tag entirely. This is handy for things which you only want present in dev mode, like Vue Dev Tools.
+* `data-package="leave"` will not inline the file, but it will remaing as an external resource. This is good for large external libraries, but means your module will probably not work without internet access. 
+
 ### API
 `fmPromise.performScript(scriptName, parameter)` Performs a FileMaker script, returning a Promise. The Promise will be resolved with the script result (parsed as JSON if possible), or rejected if the FileMaker script result starts with the word "ERROR".
 
