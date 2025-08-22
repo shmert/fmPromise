@@ -322,7 +322,10 @@ const fmPromise = {
 	}
 };
 
-// Assign to the window object so FileMaker can find it, making setup automatic for the consumer.
-window.fmPromise = globalThis.fmPromise = fmPromise;
+globalThis.fmPromise = fmPromise; // for ease of testing fmPromise in console
+
+// put these at the global level, WebDirect doesn't like Calling JavaScript with a dot in the name like `fmPromise._resolve` but will happily call `fmPromise_Resolve`.
+globalThis.fmPromise_Resolve = fmPromise._resolve;
+globalThis.fmPromise_Reject = fmPromise._reject;
 
 export default fmPromise;

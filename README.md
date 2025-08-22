@@ -10,7 +10,7 @@ This allows for integration between FileMaker and JavaScript/WebViewer, but has 
 
 **fmPromise** is designed to address these shortcomings, and help you utilize web viewers in your solution with the minimum amount of fuss.
 
-Long story short, instead of callback-based JavaScript, `fmPromise` returns a [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) for cleaner, more modern code.
+Instead of callback-based JavaScript, `fmPromise` returns a [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) for cleaner, more modern code.
 
 Add in the syntactic sugar of [async/await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function) and you can have this:
 
@@ -28,6 +28,12 @@ async function submitMyOrder(orderDetails) {
 }
 ```
 
+In addition, fmPromise offers more convenient data structures for returned values. 
+
+`fmPromise.executeSQL` return an array of arrays, instead of a string, and supports safe inlining of parameters. 
+
+`fmPromise.executeFileMakerDataAPIRecords`  returns an array of objects, with portal data as attributes.
+
 ### Debugging
 
 I would *strongly* recommend you enable external JavaScript debugging in your web viewer, as described [here](https://community.claris.com/en/s/question/0D50H00007uvYTVSA2/enable-inspect-element-with-right-click-in-webviewer-).
@@ -40,35 +46,20 @@ defaults write com.FileMaker.client.pro12 WebKitDebugDeveloperExtrasEnabled -boo
 
 This allows you to utilize Safari's developer tools on your web viewer code, which is incredibly useful.
 
-### Standalone
+### Using fmPromise
 
-If you don't want to use the FMPromise Add-On, you may manually install fmPromise and set up a web viewer.
-
-This puts the burden of packaging your web viewer content on you.
-
-1. copy the fmPromise script from fmPromiseScript.fmp12 to your file.
+1. copy the `fmPromise` script from **fmPromiseScript.fmp12** to your file.
 2. Add a web viewer to your layout.
     1. Give it the name `fmPromiseWebViewer`.
-    2. Allow JavaScript to perform FileMaker scripts.
+    2. Check "Allow JavaScript to perform FileMaker scripts".
     3. Uncheck "Automatically encode URL"
     4. Point the Web Address to your HTML file, either hosted, local, or a data URL reading from a field
 
 ### Packaging
 
-The FMPromise Add-On manages packaging local html files into your database. The Add-On workflow is:
+Work in progress: start the fmPromise build server. Write your HTML using your IDE of preference. Use the fmPromiseBuild script to get the minified, single-file html payload and store that in your database in a text field.
 
-1. Install the FMPromise Add-On
-2. Drag an FMPromise element to your layout. Enter browser mode. 
-3. Create a new module, which writes `my-module.html` to your `Documents/fmPromise/` directory.
-4. Edit this file and preview it in `$$FMPROMISE_DEVMODE`
-5. Once satisfied, package the module into the `fmPromiseModule` table
-
-This packaging step gets the source of your .html file, and optionally inlines any external JavaScript / CSS files.
-
-If you want to change the inline behavior of a script or style, add a `data-package` attribute to your `<script>` or `<link>` tag containing your JavaScript / CSS.
-
-* `data-package="omit"` will remove the tag entirely. This is handy for things which you only want present in dev mode, like Vue Dev Tools.
-* `data-package="leave"` will not inline the file, but it will remain as an external resource. This is good for large external libraries, but means your module will probably not work without internet access.
+Point your web viewer to this text field using a data URL, e.g. `"data:text/html," & WebView::schedule_board`
 
 ### API
 
@@ -77,27 +68,21 @@ word "ERROR".
 
 `fmPromise.evaluate(expression, letVars)` Evaluate an expression in FileMaker using optional letVars. This is also a handy way to set $$GLOBAL variables.
 
-`fmPromise.insertFromUrl(url, curlOptions)` Inserts from URL without worrying about cross-site scripting limitations imposed on the web viewer.
+```fmPromise.executeSql`select id, name from Team where color=${color}` ``` Performs an SQL query, returning results as an array of array. Embedded variables like `${color}` are parameterized safely using this method.
 
-`fmPromise.setFieldByName(url, curlOptions)` Sets a field by name in FileMaker.
-
-`fmPromise.executeSql(sql, ...bindings)` Executes a SQL command with placeholders, parsing the plain-text delimited result into an array of arrays.
-
-`fmPromise.setDebugEnabled(yn)` Redirects console messages to display at the bottom of the screen, handy for Web Viewer which lacks developer tools.
-
-`fmPromise.package(htmlFileName, fmFieldNameToSet)` Given an html file, this uses fmPromise to get the file contents, parse it as DOM, and inline any external references.
+`fmPromise.executeFileMakerDataAPIRecords({layouts:'Team', limit:2})` Execute the data API, returning an array of Objects. Each object in the resulting array will have non-enumerable `recordId` and `modid` attributes. `portalData` arrays for each record will be inlined with other attributes, using the portal table name as the key.
 
 ### Additional benefits
 
 * FileMaker worker scripts don't need to know anything about your web viewers, they simply exit with a (preferably JSON) result.
 * FileMaker Scripts can return an "Error …" result, which will be used to reject the script call's promise.
-* Each FileMaker script call has an id, so you can fire off multiple script calls to FileMaker and they will resolve correctly.
+* Each FileMaker script call has an id, so you can fire off multiple script calls to FileMaker and they will resolve correctly. Generally one-at-a-time execution, given FileMaker's single-threaded nature.
 * You can make script calls as soon as your `<script type="module">` tag finishes loading, since `fmPromise` takes care of polling for the `window.FileMaker` object.
 
 ### Caveats
 
 * The callback script defaults to looking for a webViewer named `fmPromiseWebViewer`. You can override the web viewer name in the JavaScript.
-* When you use Perform Javascript in Web Viewer, you will not get a result if the script your are calling is an `async` script.
+* When you use Perform Javascript in Web Viewer, you will not get a result if the performed method is `async`.
 
 ## Getting Started
 
@@ -107,12 +92,6 @@ Example:
 
 ```html
 <!doctype html>
-<html lang="en">
-<head>
-	<meta charset="utf-8">
-</head>
-<body>
-</body>
 <script type="module">
 	import fmPromise from './fm-promise.js'; // or https://cdn.jsdelivr.net/gh/shmert/fmPromise/fm-promise.min.js
 
@@ -123,7 +102,6 @@ Example:
 
 	hello();
 </script>
-</html>
 ```
 
 Now we want to display this in a Web Viewer in FileMaker.
