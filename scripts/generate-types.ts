@@ -164,7 +164,13 @@ export async function generateTypesFromXml(xmlFilePath: string, outputDir: strin
 			portalProps.push(`        "${portalToName}": ${portalRowInterfaceName}[];`);
 
 			if (!portalRowInterfaces.has(portalRowInterfaceName)) {
-				const portalFieldProps = portal.fields.map(f => `    "${f.toName}::${f.fieldName}": ${schemaMap.get(f.toName)?.get(f.fieldName) || 'any'};`);
+				// Apply the new conditional naming logic here
+				const portalFieldProps = portal.fields.map(f => {
+					const fieldType = schemaMap.get(f.toName)?.get(f.fieldName) || 'any';
+					// If the field's table matches the portal's table, use the simple name. Otherwise, use the full name.
+					const fieldKey = f.toName === portalToName ? f.fieldName : `${f.toName}::${f.fieldName}`;
+					return `    "${fieldKey}": ${fieldType};`;
+				});
 				portalRowInterfaces.set(portalRowInterfaceName, `    interface ${portalRowInterfaceName} {\n${[...new Set(portalFieldProps)].join('\n')}\n    }`);
 			}
 		});

@@ -1,7 +1,7 @@
 <!doctype html>
 Hello {{name}}
 
-<script type="module" >
+<script type="module"  >
 	import fmPromise from '../src/fm-promise.js';
 
 	let user = await fmPromise.evaluate('Get(UserName)')
@@ -9,13 +9,17 @@ Hello {{name}}
 
 	async function testTypeSafety() {
 		// 1. As you type 'Abstract', the IDE should suggest valid layout names.
-		const records:AsMA_UHMS.Abstract[] = await fmPromise.executeFileMakerDataAPIRecords({
+
+		/**
+		 * @type {AsMA_UHMS.Abstract[]}
+		 */
+		let records = await fmPromise.executeFileMakerDataAPIRecords({
 			layouts: 'Abstract', limit:1
 		});
 		let firstRecord = records[0];
-		const title = firstRecord.fieldData['Abstract::title'];
-		const coAuthors = firstRecord.portalData.Abstract__CoAuthors;
-		const firstCoAuthorFirstName = coAuthors[0]['Abstract__CoAuthors::firstName'];
+		console.log('firstRecord.recordId=' + firstRecord.recordId );
+		let emails = firstRecord.Abstract__CoAuthors.map(co => `${co.firstName} ${co.lastName} <${co.email}>`);
+		console.log('CoAuthors:', emails);
 	}
 
 	testTypeSafety();

@@ -51,6 +51,14 @@ export type DataAPIRecordArray<T> = T[] & {
 	totalRecordCount: number;
 };
 
+/**
+ * A data API record or portal row record
+ */
+export interface DataAPIRecord {
+	recordId:number;
+	modid:number;
+}
+
 class FMPromiseError extends Error {
 	public code?: string | number;
 
@@ -170,6 +178,28 @@ const fmPromise = {
 		return result;
 	},
 
+	/** @internal Processes a single portal row to clean up field names and hide metadata. */
+	_processPortalRow(portalRow: any, portalName: string): any {
+		const cleanedRow: { [key: string]: any } = {};
+		const prefix = `${portalName}::`;
+
+		for (const key in portalRow) {
+			if (key === 'recordId' || key === 'modId') continue;
+
+			if (key.startsWith(prefix)) {
+				const newKey = key.substring(prefix.length);
+				cleanedRow[newKey] = portalRow[key];
+			} else {
+				cleanedRow[key] = portalRow[key];
+			}
+		}
+
+		Object.defineProperties(cleanedRow, {
+			recordId: {value: portalRow.recordId, enumerable: false},
+			modId: {value: portalRow.modId, enumerable: false},
+		});
+		return cleanedRow;
+	},
 	/**
 	 * A convenience wrapper for `executeFileMakerDataAPI` that returns just the record data,
 	 * with full TypeScript type safety based on the provided layout name.
@@ -181,12 +211,23 @@ const fmPromise = {
 		params: { layouts: L } & Omit<DataAPIRequest, 'layouts'>
 	): Promise<DataAPIRecordArray<FMSchema.LayoutMap[L]>> {
 		const response = await this.executeFileMakerDataAPI(params);
+
 		const arr = response.response.data.map((o: any) => {
-			const rec = {...o.fieldData, ...o.portalData};
+			const portalData = o.portalData || {};
+			const cleanedPortalData: { [key: string]: any } = {};
+
+			// Process each portal to clean up its rows
+			for (const portalName in portalData) {
+				const portalRows = portalData[portalName];
+				cleanedPortalData[portalName] = portalRows.map((row: any) => this._processPortalRow(row, portalName));
+			}
+
+			const rec = {...o.fieldData, ...cleanedPortalData};
 			Object.defineProperties(rec, {
 				recordId: {value: o.recordId, enumerable: false},
 				modId: {value: o.modId, enumerable: false},
 			});
+
 			return rec;
 		});
 
