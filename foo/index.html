@@ -1,0 +1,23 @@
+<!doctype html>
+Hello {{name}}
+
+<script type="module" >
+	import fmPromise from '../src/fm-promise.js';
+
+	let user = await fmPromise.evaluate('Get(UserName)')
+	document.body.innerText = 'Hello, ' + user;
+
+	async function testTypeSafety() {
+		// 1. As you type 'Abstract', the IDE should suggest valid layout names.
+		const records:AsMA_UHMS.Abstract[] = await fmPromise.executeFileMakerDataAPIRecords({
+			layouts: 'Abstract', limit:1
+		});
+		let firstRecord = records[0];
+		const title = firstRecord.fieldData['Abstract::title'];
+		const coAuthors = firstRecord.portalData.Abstract__CoAuthors;
+		const firstCoAuthorFirstName = coAuthors[0]['Abstract__CoAuthors::firstName'];
+	}
+
+	testTypeSafety();
+
+</script>

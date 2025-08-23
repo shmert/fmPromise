@@ -1,29 +1,29 @@
+// --- Type Definitions ---
+
 // By defining an empty LayoutMap, the code works even if no schema is generated.
 // The user's generated `filemaker-types.d.ts` will merge with and extend this.
 declare namespace FMSchema {
 	interface LayoutMap {
 	}
 }
+// This allows TypeScript to know about the custom global variable for webViewerName
+declare global {
+	interface Document {
+		$FMP_WEB_VIEWER_NAME?: string;
+	}
+}
 
 export type FMPromiseScriptRunningOption = 0 | 1 | 2 | 3 | 4 | 5;
 
-/**
- * Options for the `performScript` call, mirroring FileMaker's `Perform Script with Option`.
- */
+/** Options for the `performScript` call, mirroring FileMaker's `Perform Script with Option`. */
 export interface PerformScriptOptions {
 	/** If true, the promise will always resolve with a string, bypassing automatic JSON parsing. */
 	alwaysReturnString?: boolean;
-	/**
-	 * Specifies how to handle a currently running FileMaker script.
-	 * 0: Continue (default); 1: Halt; 2: Exit; 3: Resume; 4: Pause; 5: Interrupt.
-	 * @see {@link https://help.claris.com/en/pro-help/content/filemaker-performscriptwithoption.html|FileMaker Docs}
-	 */
+	/** Specifies how to handle a currently running FileMaker script. 0: Continue (default); 1: Halt; 2: Exit; 3: Resume; 4: Pause; 5: Interrupt. */
 	runningScript?: FMPromiseScriptRunningOption;
 }
 
-/**
- * Parameters for a FileMaker Data API request.
- */
+/** Parameters for a FileMaker Data API request. */
 export interface DataAPIRequest {
 	/** The name of the layout to perform the action on. */
 	layouts: keyof FMSchema.LayoutMap | (string & {}); // Allow any string but autocomplete known layouts
@@ -39,14 +39,17 @@ export interface DataAPIRequest {
 	portal?: string[];
 }
 
-/**
- * The raw top-level response from a FileMaker Data API script step.
- */
+/** The raw top-level response from a FileMaker Data API script step. */
 export interface DataAPIResponse {
 	messages: { code: string; message: string }[];
 	response: any;
 }
 
+/** A specialized array type that includes Data API metadata. */
+export type DataAPIRecordArray<T> = T[] & {
+	foundCount: number;
+	totalRecordCount: number;
+};
 
 class FMPromiseError extends Error {
 	public code?: string | number;
@@ -55,6 +58,10 @@ class FMPromiseError extends Error {
 		super(message);
 		this.name = 'FMPromiseError';
 		this.code = code;
+	}
+
+	toString() {
+		return this.code ? `${this.message} (${this.code})` : this.message;
 	}
 }
 
@@ -66,8 +73,16 @@ const callbacksById: { [key: number]: { resolve: (value: any) => void; reject: (
 const fmProxy: Promise<any> = Promise.race([
 	new Promise<any>((resolve) => {
 		// @ts-ignore
-		if (window.FileMaker) resolve(window.FileMaker);
-		else Object.defineProperty(window, 'FileMaker', {set: (v) => resolve(v)});
+		if (window.FileMaker) {
+			// @ts-ignore
+			resolve(window.FileMaker);
+		} else {
+			let _fileMaker: any;
+			Object.defineProperty(window, 'FileMaker', {
+				get: () => _fileMaker,
+				set: (v) => resolve(_fileMaker = v),
+			});
+		}
 	}),
 	new Promise((_, reject) =>
 		setTimeout(() => reject(new FMPromiseError({message: 'FileMaker object not found within 5 seconds.'})), 5000)
@@ -77,7 +92,8 @@ const fmProxy: Promise<any> = Promise.race([
 // --- Main fmPromise Object ---
 
 const fmPromise = {
-	webViewerName: new URLSearchParams(window.location.search).get('webViewerName') || 'fmPromiseWebViewer',
+	/** The name of the web viewer object in FileMaker. */
+	webViewerName: document.$FMP_WEB_VIEWER_NAME || new URLSearchParams(window.location.search).get('webViewerName') || 'fmPromiseWebViewer',
 
 	/**
 	 * Performs a FileMaker script and returns a Promise.
@@ -89,6 +105,7 @@ const fmPromise = {
 	 */
 	async performScript<T = any>(scriptName: string, scriptParameter: any = null, options: PerformScriptOptions = {}): Promise<T> {
 		const promiseId = ++lastPromiseId;
+		console.log(`[fmPromise] #${promiseId}: Calling script "${scriptName}"`, scriptParameter);
 
 		if (scriptParameter && typeof scriptParameter !== 'string') {
 			scriptParameter = JSON.stringify(scriptParameter);
@@ -100,17 +117,24 @@ const fmPromise = {
 			callbacksById[promiseId] = {resolve, reject};
 			const meta = JSON.stringify({scriptName, promiseId, webViewerName: this.webViewerName});
 			const comboParam = meta + '\n' + (scriptParameter || '');
-			const option = (options.runningScript || 0).toString();
+			const option = options.runningScript || 0;
 
-			fm.PerformScriptWithOption('fmPromise', comboParam, option);
+			if (option === 0) {
+				fm.PerformScript('fmPromise', comboParam);
+			} else {
+				fm.PerformScriptWithOption('fmPromise', comboParam, option.toString());
+			}
 		});
 
 		if (!options.alwaysReturnString && typeof result === 'string' && (result.startsWith('{') || result.startsWith('['))) {
 			try {
 				result = JSON.parse(result);
-			} catch (e) { /* Ignore parsing errors */
+			} catch (e) {
+				console.warn(`[fmPromise] #${promiseId}: Unable to parse JSON result.`, {result, error: e});
 			}
 		}
+
+		console.log(`[fmPromise] #${promiseId}: Received result.`, result);
 		return result as T;
 	},
 
@@ -123,7 +147,7 @@ const fmPromise = {
 	 * @returns {Promise<T>} A promise that resolves with the evaluated result.
 	 */
 	evaluate<T = any>(expression: string, letVars: Record<string, any> = {}, options: PerformScriptOptions = {}): Promise<T> {
-		const letEx = Object.entries(letVars).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(';');
+		const letEx = Object.entries(letVars || {}).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(';');
 		const stmt = `Let([${letEx}] ; ${expression})`;
 		return this.performScript('fmPromise.evaluate', stmt, options);
 	},
@@ -137,7 +161,10 @@ const fmPromise = {
 	 */
 	async executeFileMakerDataAPI(params: DataAPIRequest): Promise<DataAPIResponse> {
 		const result = await this.performScript<DataAPIResponse>('fmPromise.executeFileMakerDataAPI', params);
-		if (result?.messages?.[0]?.code !== '0') {
+		if (!result || !result.messages || !result.messages.length) {
+			throw new FMPromiseError({code: -1, message: 'Empty data API response'});
+		}
+		if (result.messages[0].code !== '0') {
 			throw new FMPromiseError(result.messages[0]);
 		}
 		return result;
@@ -152,10 +179,9 @@ const fmPromise = {
 	 */
 	async executeFileMakerDataAPIRecords<L extends keyof FMSchema.LayoutMap>(
 		params: { layouts: L } & Omit<DataAPIRequest, 'layouts'>
-	): Promise<FMSchema.LayoutMap[L][]> {
-		const rawResponse = await this.executeFileMakerDataAPI(params);
-
-		const arr = rawResponse.response.data.map((o: any) => {
+	): Promise<DataAPIRecordArray<FMSchema.LayoutMap[L]>> {
+		const response = await this.executeFileMakerDataAPI(params);
+		const arr = response.response.data.map((o: any) => {
 			const rec = {...o.fieldData, ...o.portalData};
 			Object.defineProperties(rec, {
 				recordId: {value: o.recordId, enumerable: false},
@@ -163,7 +189,12 @@ const fmPromise = {
 			});
 			return rec;
 		});
-		return arr;
+
+		Object.defineProperties(arr, {
+			foundCount: {value: response.response.dataInfo.foundCount, enumerable: false},
+			totalRecordCount: {value: response.response.dataInfo.totalRecordCount, enumerable: false},
+		});
+		return arr as DataAPIRecordArray<FMSchema.LayoutMap[L]>;
 	},
 
 	/**
@@ -175,19 +206,33 @@ const fmPromise = {
 	 */
 	async executeSql(sqlOrStrings: TemplateStringsArray | string, ...bindings: any[]): Promise<any[][]> {
 		let sql: string;
-		if (Array.isArray(sqlOrStrings) && 'raw' in sqlOrStrings) {
-			sql = sqlOrStrings.map((str, i) => str + (bindings.length > i ? '?' : '')).join('');
+		let finalBindings: any[];
+
+		if (Array.isArray(sqlOrStrings) && Array.isArray((sqlOrStrings as TemplateStringsArray).raw)) {
+			if (bindings.length !== sqlOrStrings.length - 1) {
+				throw new FMPromiseError({code: -1, message: 'Invalid template literal for executeSql'});
+			}
+			sql = (sqlOrStrings as TemplateStringsArray).join('?').replace(/\n\s*/g, ' ');
+			finalBindings = bindings;
+		} else if (typeof sqlOrStrings === 'string') {
+			sql = sqlOrStrings;
+			finalBindings = bindings;
 		} else {
-			sql = sqlOrStrings as string;
+			throw new FMPromiseError({
+				code: -1,
+				message: 'Invalid arguments: executeSql must be called with a SQL string, or as a template literal.'
+			});
 		}
 
-		const p = bindings.map((o) => ` ; ${JSON.stringify(o)}`).join('');
+		const p = finalBindings.map((o) => ` ; ${JSON.stringify(o)}`).join('');
 		const colDelim = `|${Math.random()}|`;
 		const rowDelim = `~${Math.random()}~`;
 
 		const rawData = await this.evaluate<string>(`ExecuteSQLe(${JSON.stringify(sql)} ; "${colDelim}" ; "${rowDelim}"${p})`, undefined, {alwaysReturnString: true});
 
-		if (!rawData) return [];
+		if (rawData === '' || rawData === null || rawData === undefined) {
+			return [];
+		}
 		return rawData.split(rowDelim).map((r) => r.split(colDelim));
 	},
 
@@ -222,7 +267,7 @@ const fmPromise = {
 	 */
 	async showCustomDialog(title: string, body: string, btn1 = 'OK', btn2 = '', btn3 = ''): Promise<number> {
 		const result = await this.performScript<string>('fmPromise.showCustomDialog', {title, body, btn1, btn2, btn3});
-		return parseInt(result, 10);
+		return parseInt(result, 10) || 0; // Ensure it returns a number, defaulting to 0
 	},
 
 	/** @internal */
@@ -240,8 +285,9 @@ const fmPromise = {
 			try {
 				errorObj = JSON.parse(errorString);
 			} catch (e) {
-				errorObj = {message: errorString, code: -1};
+				errorObj = {message: errorString};
 			}
+			console.warn(`[fmPromise] #${promiseId}: Rejected.`, errorObj);
 			callbacksById[promiseId].reject(new FMPromiseError(errorObj));
 			delete callbacksById[promiseId];
 		}
@@ -258,11 +304,8 @@ declare global {
 	}
 }
 
-// For debugging in the browser inspector
 // @ts-ignore
 globalThis.fmPromise = fmPromise;
-
-// For WebDirect compatibility
 // @ts-ignore
 globalThis.fmPromise_Resolve = fmPromise._resolve;
 // @ts-ignore

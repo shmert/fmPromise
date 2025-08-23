@@ -80,8 +80,13 @@ app.get('/build/:moduleID', (req: Request, res: Response) => {
  * @param {string} xmlFilePath - The path to the changed XML file.
  */
 async function handleSchemaChange(xmlFilePath: string): Promise<void> {
+    // Filter out any non-XML files that the watcher might pick up (e.g., .DS_Store)
+    if (!xmlFilePath.toLowerCase().endsWith('.xml')) {
+        return;
+    }
+
     const fileName = path.basename(xmlFilePath);
-    console.log(`[Watcher] Schema file detected: ${fileName}.`);
+    console.log(`[Watcher] XML file event detected: ${fileName}.`);
     try {
         await generateTypesFromXml(xmlFilePath, projectRoot);
     } catch (e) {
@@ -90,10 +95,9 @@ async function handleSchemaChange(xmlFilePath: string): Promise<void> {
 }
 
 console.log(`[Watcher] Initializing schema watcher...`);
-const watcher = chokidar.watch(`${schemaDir}/*.xml`, {
+// Chokidar v4 watches directories; we filter for .xml files in the handler.
+const watcher = chokidar.watch(schemaDir, {
     persistent: true,
-    // This option makes the watcher more robust against "safe save" behavior from IDEs.
-    // It waits for 250ms of file size stability before firing events.
     awaitWriteFinish: {
         stabilityThreshold: 250,
     },
@@ -102,9 +106,8 @@ const watcher = chokidar.watch(`${schemaDir}/*.xml`, {
 watcher
     .on('add', (path: string) => handleSchemaChange(path))
     .on('change', (path: string) => handleSchemaChange(path))
-    .on('ready', () => console.log('[Watcher] Initial scan complete. Ready for changes.'))
+    .on('ready', () => console.log('[Watcher] Initial scan complete. Ready for changes in the schema directory.'))
     .on('error', (error) => console.error(`[Watcher] Error: ${error}`));
-
 
 // --- START SERVER ---
 

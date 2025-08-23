@@ -1,112 +1,163 @@
+import { XMLParser } from 'fast-xml-parser';
 import fs from 'fs/promises';
 import path from 'path';
-import {XMLParser} from 'fast-xml-parser';
 
-// --- TYPE DEFINITIONS for parsing the FileMaker XML structure ---
+// --- TYPE DEFINITIONS - Directly derived from the provided XSD ---
 
-interface FmField {
-	'@_name': string;
-	'@_dataType'?: string; // For BaseField
-	'@_datatype'?: string; // For Field (Calc)
-	'@_comment'?: string;
-}
-
-// A table can contain both BaseFields (standard) and Fields (calcs, summaries)
-interface FmTable {
-	'@_name': string;
-	BaseField?: FmField[];
-	Field?: FmField[]; // Calculation fields have a different tag name
-}
-
+interface FmFieldDef { '@_name': string; '@_dataType'?: string; '@_datatype'?: string; '@_comment'?: string; TableOccurrenceReference: { '@_id': string } }
+interface FmTableDef { '@_id': string; '@_name': string; }
+interface FmFieldReference { '@_name': string; TableOccurrenceReference: { '@_name': string; }; }
+interface FmPortal { TableOccurrenceReference: { '@_name': string; }; ObjectList?: { LayoutObject: FmLayoutObject | FmLayoutObject[] }; }
+interface FmLayoutObject { '@_type': string; Portal?: FmPortal; Field?: { FieldReference: FmFieldReference }; ObjectList?: { LayoutObject: FmLayoutObject | FmLayoutObject[] }; }
+interface FmLayoutPart { ObjectList?: { LayoutObject: FmLayoutObject | FmLayoutObject[] }; }
+interface FmLayout { '@_name': string; '@_isFolder'?: string; PartsList?: { Part: FmLayoutPart | FmLayoutPart[] }; }
+interface FmFieldCatalog { BaseTableReference: { '@_id': string }; ObjectList?: { Field: FmFieldDef | FmFieldDef[] }; }
 interface FmXml {
-	FMSaveAsXML: {
-		Structure: {
-			Table: FmTable[];
-		}
-	}
+    FMSaveAsXML: {
+        Structure: {
+            AddAction: {
+                BaseTableCatalog: { BaseTable: FmTableDef | FmTableDef[] };
+                FieldsForTables: { FieldCatalog: FmFieldCatalog[] };
+                LayoutCatalog: { Layout: FmLayout | FmLayout[] };
+            }
+        }
+    }
 }
 
-/**
- * Maps FileMaker data types to corresponding TypeScript types.
- * @param fmType - The FileMaker data type string.
- * @returns The TypeScript type string.
- */
-function mapFmTypeToTsType(fmType: string | undefined): string {
-	switch (fmType) {
-		case 'Number':
-			return 'number';
-		case 'Text':
-		case 'Date':
-		case 'Time':
-		case 'Timestamp':
-		case 'Container':
-			return 'string';
-		default: // For unknown or summary types
-			return 'any';
-	}
+// --- HELPER FUNCTIONS ---
+
+const mapFmTypeToTsType = (fmType: string | undefined): string => {
+    switch (fmType) {
+        case 'Number': return 'number';
+        case 'Text': case 'Date': case 'Time': case 'Timestamp': case 'Container': return 'string';
+        default: return 'any';
+    }
+};
+const normalizeToArray = <T>(data: T | T[] | undefined): T[] => !data ? [] : Array.isArray(data) ? data : [data];
+
+interface ExtractedLayoutInfo {
+    fields: { toName: string; fieldName: string }[];
+    portals: { portalToName: string; fields: { toName: string; fieldName: string }[] }[];
 }
 
-/**
- * Parses a FileMaker "Save a Copy as XML" file and generates TypeScript definitions.
- * @param xmlFilePath - The full path to the XML file.
- * @param outputDir - The directory where the output file should be saved.
- */
+/** Recursively find all fields and portals within a list of layout objects. */
+function findFieldsAndPortals(objects: FmLayoutObject[]): ExtractedLayoutInfo {
+    const result: ExtractedLayoutInfo = { fields: [], portals: [] };
+
+    for (const obj of objects) {
+        if (obj.Field?.FieldReference) {
+            const ref = obj.Field.FieldReference;
+            result.fields.push({ toName: ref.TableOccurrenceReference['@_name'], fieldName: ref['@_name'] });
+        }
+        else if (obj['@_type'] === 'Portal' && obj.Portal) {
+            const portalFields = findFieldsAndPortals(normalizeToArray(obj.Portal.ObjectList?.LayoutObject));
+            result.portals.push({
+                portalToName: obj.Portal.TableOccurrenceReference['@_name'],
+                fields: portalFields.fields,
+            });
+        }
+        else if (obj.ObjectList) {
+            const nested = findFieldsAndPortals(normalizeToArray(obj.ObjectList.LayoutObject));
+            result.fields.push(...nested.fields);
+            result.portals.push(...nested.portals);
+        }
+    }
+    return result;
+}
+
+// --- CORE LOGIC ---
+
 export async function generateTypesFromXml(xmlFilePath: string, outputDir: string): Promise<void> {
-	console.log(`[Generator] Reading schema from: ${path.basename(xmlFilePath)}`);
+    console.log(`[Generator] Reading schema from: ${path.basename(xmlFilePath)}`);
 
-	const xmlContent = await fs.readFile(xmlFilePath, 'utf-8');
+    let xmlContent = await fs.readFile(xmlFilePath, 'utf-16le');
+    xmlContent = xmlContent.replace(/^\uFEFF/, '');
 
-	// 1. Parse the XML file content
-	const parser = new XMLParser({ignoreAttributes: false, attributeNamePrefix: '@_'});
-	const jsonObj = parser.parse(xmlContent) as FmXml;
-	const tables = jsonObj.FMSaveAsXML?.Structure?.Table;
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', ignoreDeclaration: true, parseTagValue: false });
+    const jsonObj = parser.parse(xmlContent) as FmXml;
 
-	if (!tables || !Array.isArray(tables)) {
-		throw new Error('Could not find a valid Table structure in the provided XML file.');
-	}
+    const tableDefs = normalizeToArray(jsonObj.FMSaveAsXML?.Structure?.AddAction?.BaseTableCatalog?.BaseTable);
+    const fieldCatalogs = normalizeToArray(jsonObj.FMSaveAsXML?.Structure?.AddAction?.FieldsForTables?.FieldCatalog);
+    let layouts = normalizeToArray(jsonObj.FMSaveAsXML?.Structure?.AddAction?.LayoutCatalog?.Layout);
 
-	// 2. Derive the namespace from the filename
-	const namespace = path.basename(xmlFilePath, '.xml').replace(/[^a-zA-Z0-9_]/g, '');
+    if (tableDefs.length === 0) throw new Error('Could not find BaseTableCatalog in the XML file.');
+    if (fieldCatalogs.length === 0) throw new Error('Could not find FieldsForTables in the XML file.');
+    if (layouts.length === 0) throw new Error('Could not find LayoutCatalog in the XML file.');
 
-	// 3. Generate the interface for each table
-	const interfaceStrings = tables.map(table => {
-		const tableName = table['@_name'];
-		// Combine BaseField and Field arrays into one for processing
-		const allFields = [...(table.BaseField || []), ...(table.Field || [])];
+    const namespace = path.basename(xmlFilePath, '.xml').replace(/[^a-zA-Z0-9_]/g, '');
 
-		const fieldStrings = allFields.map(field => {
-			const fieldName = field['@_name'];
-			const comment = field['@_comment'];
-			// FileMaker uses two different attribute names for datatype
-			const dataType = field['@_dataType'] || field['@_datatype'];
-			const tsType = mapFmTypeToTsType(dataType);
+    // --- Pass 1: Build a comprehensive schema map ---
+    const tableIdToName = new Map(tableDefs.map(t => [t['@_id'], t['@_name']]));
+    const schemaMap = new Map<string, Map<string, string>>();
+    tableDefs.forEach(t => schemaMap.set(t['@_name'], new Map()));
 
-			let fieldString = '';
-			// Add JSDoc comment if it exists
-			if (comment) {
-				fieldString += `    /**\n     * ${comment.replace(/\r\n/g, ' ').replace(/\n/g, ' ')}\n     */\n`;
-			}
-			// Add the property definition, quoting field names for safety
-			fieldString += `    "${fieldName}": ${tsType};`;
+    fieldCatalogs.forEach(catalog => {
+        // The BaseTableReference is a sibling to ObjectList, not a parent.
+        const parentTableId = catalog.BaseTableReference['@_id'];
+        const parentTableName = tableIdToName.get(parentTableId);
+        if (parentTableName) {
+            normalizeToArray(catalog.ObjectList?.Field).forEach(field => {
+                const dataType = field['@_dataType'] || field['@_datatype'];
+                schemaMap.get(parentTableName)?.set(field['@_name'], mapFmTypeToTsType(dataType));
+            });
+        }
+    });
 
-			return fieldString;
-		}).join('\n');
+    // --- Pass 2: Filter layouts and generate high-fidelity interfaces ---
+    const seenLayoutNames = new Set<string>();
+    layouts = layouts.filter(layout => {
+        const name = layout['@_name'];
+        if (!name || name === '--' || layout['@_isFolder'] === 'True' || layout['@_isFolder'] === 'Marker' || seenLayoutNames.has(name)) return false;
+        seenLayoutNames.add(name);
+        return true;
+    });
 
-		return `    interface ${tableName} {\n${fieldStrings}\n    }`;
-	});
+    const layoutInterfaces: string[] = [];
+    const portalRowInterfaces = new Map<string, string>();
 
-	// 4. Generate the LayoutMap for automatic type inference
-	const layoutMapStrings = tables.map(table => {
-		const tableName = table['@_name'];
-		return `        "${tableName}": ${tableName};`;
-	}).join('\n');
+    layouts.forEach(layout => {
+        const layoutName = layout['@_name'];
+        const allLayoutObjects = normalizeToArray(layout.PartsList?.Part)
+            .flatMap(part => normalizeToArray(part.ObjectList?.LayoutObject));
 
-	// 5. Assemble the final TypeScript definition file content
-	const outputContent = `// Auto-generated by fm-promise-server. Do not edit manually.
+        const { fields: baseFields, portals } = findFieldsAndPortals(allLayoutObjects);
+
+        const fieldDataProps = baseFields.map(f => `        "${f.toName}::${f.fieldName}": ${schemaMap.get(f.toName)?.get(f.fieldName) || 'any'};`);
+        const portalDataProps: string[] = [];
+
+        portals.forEach(portal => {
+            const portalRowInterfaceName = `${layoutName.replace(/[^a-zA-Z0-9_]/g, '_')}_${portal.portalToName}_PortalRow`;
+            portalDataProps.push(`        "${portal.portalToName}": ${portalRowInterfaceName}[];`);
+
+            if (!portalRowInterfaces.has(portalRowInterfaceName)) {
+                const portalFieldProps = portal.fields.map(f => `    "${f.toName}::${f.fieldName}": ${schemaMap.get(f.toName)?.get(f.fieldName) || 'any'};`);
+                portalRowInterfaces.set(portalRowInterfaceName, `    interface ${portalRowInterfaceName} {\n${[...new Set(portalFieldProps)].join('\n')}\n    }`);
+            }
+        });
+
+        const safeLayoutName = layoutName.replace(/[^a-zA-Z0-9_]/g, '_');
+        const fieldDataInterface = `    interface ${safeLayoutName}_FieldData {\n${[...new Set(fieldDataProps)].join('\n')}\n    }`;
+        const portalDataInterface = `    interface ${safeLayoutName}_PortalData {\n${[...new Set(portalDataProps)].join('\n')}\n    }`;
+        const mainLayoutInterface = `    interface ${safeLayoutName} {\n        fieldData: ${safeLayoutName}_FieldData;\n        portalData: ${safeLayoutName}_PortalData;\n    }`;
+
+        layoutInterfaces.push(fieldDataInterface, portalDataInterface, mainLayoutInterface);
+    });
+
+    // --- Final Assembly ---
+    const layoutMapStrings = layouts.map(layout => {
+        const safeLayoutName = layout['@_name'].replace(/[^a-zA-Z0-9_]/g, '_');
+        return `        "${layout['@_name']}": ${safeLayoutName};`;
+    }).join('\n');
+
+    const outputContent = `// Auto-generated by fm-promise-server. Do not edit manually.
 // Last generated: ${new Date().toISOString()}
 
 declare namespace ${namespace} {
-${interfaceStrings.join('\n\n')}
+// --- Portal Row Interfaces ---
+${[...portalRowInterfaces.values()].join('\n\n')}
+
+// --- Layout-Specific Interfaces ---
+${layoutInterfaces.join('\n\n')}
 
     interface LayoutMap {
 ${layoutMapStrings}
@@ -114,8 +165,7 @@ ${layoutMapStrings}
 }
 `;
 
-	// 6. Write the file to the project root
-	const outputPath = path.join(outputDir, 'filemaker-types.d.ts');
-	await fs.writeFile(outputPath, outputContent);
-	console.log(`[Generator] TypeScript definitions written to: ${outputPath}`);
+    const outputPath = path.join(outputDir, 'filemaker-types.d.ts');
+    await fs.writeFile(outputPath, outputContent);
+    console.log(`[Generator] TypeScript definitions written to: ${outputPath}`);
 }
