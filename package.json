@@ -1,0 +1,41 @@
+{
+  "name": "@360works/fm-promise",
+  "version": "2.0.0",
+  "description": "A modern JS toolkit for FileMaker Web Viewers, including a dev server and type generation.",
+  "type": "module",
+  "main": "dist/fm-promise.js",
+  "scripts": {
+    "dev:assistant": "tsx scripts/fm-promise-server.ts",
+    "build:library": "tsc --project tsconfig.json",
+    "dev:example": "vite",
+    "build:example": "vite build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shmert/fmPromise.git"
+  },
+  "keywords": [
+    "filemaker",
+    "promise",
+    "async",
+    "webviewer",
+    "typescript",
+    "javascript"
+  ],
+  "author": "360Works",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/shmert/fmPromise/issues"
+  },
+  "homepage": "https://github.com/shmert/fmPromise#readme",
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.3.0",
+    "chokidar": "^4.0.3",
+    "express": "^5.1.0",
+    "fast-xml-parser": "^5.2.5",
+    "tsx": "^4.20.4",
+    "vite": "^7.1.3",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}

@@ -86,14 +86,14 @@ word "ERROR".
 
 ## Getting Started
 
-Create a static HTML file and a JavaScript file (`fm-promise.js`) in the same directory. All your application logic will go inside a single `<script type="module">` block, which allows you to use the modern `import` syntax.
+Create a static HTML file and a JavaScript file (`fm-promise.ts`) in the same directory. All your application logic will go inside a single `<script type="module">` block, which allows you to use the modern `import` syntax.
 
 Example:
 
 ```html
 <!doctype html>
 <script type="module">
-	import fmPromise from './fm-promise.js'; // or https://cdn.jsdelivr.net/gh/shmert/fmPromise/fm-promise.min.js
+	import fmPromise from 'fmPromise-github/src/fm-promise.ts'; // or https://cdn.jsdelivr.net/gh/shmert/fmPromise/fm-promise.min.js
 
 	async function hello() {
 		const name = await fmPromise.evaluate('Get(Username)');
@@ -137,7 +137,7 @@ The following example loads Vue.js 3 from the internet, fetches all tables and f
 </div>
 
 <script type="module">
-	import fmPromise from './fm-promise.js';
+	import fmPromise from 'fmPromise-github/src/fm-promise.ts';
 	import {createApp} from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
 
 	createApp({
