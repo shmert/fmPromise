@@ -1,3 +1,4 @@
+#!/usr/bin/env tsx
 import express, {Request, Response} from 'express';
 import {exec} from 'child_process';
 import path from 'path';
