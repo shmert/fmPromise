@@ -1,4 +1,4 @@
-import fmPromise from '@360works/fm-promise';
+import fmPromise from '@360works/fmpromise';
 
 async function main() {
 	const appElement = document.getElementById('app');

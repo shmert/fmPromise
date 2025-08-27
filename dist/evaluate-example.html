@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<style>
+		html, body {height: 100%;margin: 0;padding: 0;}
+		p, li, div, h1, h2, h3, h4, h5 {font-family: Arial, Helvetica, sans-serif;color: #707070;}
+
+        label {
+            font-weight: bold;
+        }
+
+        #content {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        textarea {
+            flex-grow: 1;
+        }
+
+        #evalControls {
+            float: right;
+        }
+
+        textarea.error {
+            background-color: #ffe0e5;
+			font-weight: bold;
+            color: red;
+        }
+	</style>
+  <script type="module" crossorigin>class m extends Error{code;constructor({message:e="Unknown error",code:r}){super(e),this.name="FMPromiseError",this.code=r}toString(){return this.code?`${this.message} (${this.code})`:this.message}}let w=0;const l={},g=Promise.race([new Promise(t=>{if(window.FileMaker)t(window.FileMaker);else{let e;Object.defineProperty(window,"FileMaker",{get:()=>e,set:r=>t(e=r)})}}),new Promise((t,e)=>setTimeout(()=>e(new m({message:"FileMaker object not found within 5 seconds."})),5e3))]),d={get webViewerName(){return window.FMPROMISE_WEB_VIEWER_NAME||new URLSearchParams(window.location.search).get("webViewerName")||"fmPromiseWebViewer"},async performScript(t,e=null,r={}){const s=++w;console.log(`[fmPromise] #${s}: Calling script "${t}"`,e),e&&typeof e!="string"&&(e=JSON.stringify(e));const a=await g;let o=await new Promise((n,i)=>{l[s]={resolve:n,reject:i};const u=JSON.stringify({scriptName:t,promiseId:s,webViewerName:this.webViewerName})+`
+`+(e||""),f=r.runningScript||0;f===0?a.PerformScript("fmPromise",u):a.PerformScriptWithOption("fmPromise",u,f.toString())});if(!r.alwaysReturnString&&typeof o=="string"&&(o.startsWith("{")||o.startsWith("[")))try{o=JSON.parse(o)}catch(n){console.warn(`[fmPromise] #${s}: Unable to parse JSON result.`,{result:o,error:n})}return console.log(`[fmPromise] #${s}: Received result.`,o),o},evaluate(t,e={},r={}){const a=`Let([${Object.entries(e||{}).map(([o,n])=>`${o}=${JSON.stringify(n)}`).join(";")}] ; ${t})`;return this.performScript("fmPromise.evaluate",a,r)},async executeFileMakerDataAPI(t){const e=await this.performScript("fmPromise.executeFileMakerDataAPI",t);if(!e||!e.messages||!e.messages.length)throw new m({code:-1,message:"Empty data API response"});if(e.messages[0].code!=="0")throw new m(e.messages[0]);return e},_processPortalRow(t,e){const r={},s=`${e}::`;for(const a in t)if(!(a==="recordId"||a==="modId"))if(a.startsWith(s)){const o=a.substring(s.length);r[o]=t[a]}else r[a]=t[a];return Object.defineProperties(r,{recordId:{value:t.recordId,enumerable:!1},modId:{value:t.modId,enumerable:!1}}),r},async executeFileMakerDataAPIRecords(t){const e=await this.executeFileMakerDataAPI(t),r=e.response.data.map(s=>{const a=s.portalData||{},o={};for(const i in a){const c=a[i];o[i]=c.map(u=>this._processPortalRow(u,i))}const n={...s.fieldData,...o};return Object.defineProperties(n,{recordId:{value:s.recordId,enumerable:!1},modId:{value:s.modId,enumerable:!1}}),n});return Object.defineProperties(r,{foundCount:{value:e.response.dataInfo.foundCount,enumerable:!1},totalRecordCount:{value:e.response.dataInfo.totalRecordCount,enumerable:!1}}),r},async executeSql(t,...e){let r,s;if(Array.isArray(t)&&Array.isArray(t.raw)){if(e.length!==t.length-1)throw new m({code:-1,message:"Invalid template literal for executeSql"});r=t.join("?").replace(/\n\s*/g," "),s=e}else if(typeof t=="string")r=t,s=e;else throw new m({code:-1,message:"Invalid arguments: executeSql must be called with a SQL string, or as a template literal."});const a=s.map(c=>` ; ${JSON.stringify(c)}`).join(""),o=`|${Math.random()}|`,n=`~${Math.random()}~`,i=await this.evaluate(`ExecuteSQLe(${JSON.stringify(r)} ; "${o}" ; "${n}"${a})`,void 0,{alwaysReturnString:!0});return i===""||i===null||i===void 0?[]:i.split(n).map(c=>c.split(o))},insertFromUrl(t,e=""){return this.performScript("fmPromise.insertFromURL",{url:t,curlOptions:e})},setFieldByName(t,e){return this.performScript("fmPromise.setFieldByName",{fmFieldNameToSet:t,value:e})},async showCustomDialog(t,e,r="OK",s="",a=""){const o=await this.performScript("fmPromise.showCustomDialog",{title:t,body:e,btn1:r,btn2:s,btn3:a});return parseInt(o,10)||0},_resolve(t,e){l[t]&&(l[t].resolve(e),delete l[t])},_reject(t,e){if(l[t]){let r;try{r=JSON.parse(e)}catch{r={message:e}}console.warn(`[fmPromise] #${t}: Rejected.`,r),l[t].reject(new m(r)),delete l[t]}}};globalThis.fmPromise=d;globalThis.fmPromise_Resolve=d._resolve;globalThis.fmPromise_Reject=d._reject;document.getElementById("goButton").addEventListener("click",async()=>{let t=document.getElementById("result");try{const e=document.getElementById("expression").value;t.value=await d.evaluate(e),t.classList.remove("error")}catch(e){t.value="Error: "+JSON.stringify(e,null,4),t.classList.add("error")}});</script>
+</head>
+<body>
+
+<div id="content">
+	<label for="expression">Expression</label>
+	<textarea cols="30" id="expression" name="expression" rows="10">"Wake up, " & Get ( Username ) & ", it's " & get(CurrentTime) & "!"</textarea>
+	<div>
+		<div id="evalControls">
+			<!--			<label for="autoEval"><input id="autoEval" name="autoEval" type="checkbox">Automatically Evaluate</label>-->
+			<button id="goButton">Evaluate</button>
+		</div>
+		<label for="result">Result</label>
+	</div>
+	<textarea cols="30" id="result" name="result" rows="10"></textarea>
+</div>
+
+</body>
+</html>

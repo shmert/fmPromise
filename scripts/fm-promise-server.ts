@@ -184,6 +184,12 @@ app.post('/init/{*path}', async (req: Request, res: Response) => {
 	}
 });
 
+/**
+ * A simple endpoint to check if the server is running.
+ */
+app.get('/ping', (req: Request, res: Response) => {
+	res.status(200).send('pong');
+});
 
 app.get('{*path}', (req: Request, res: Response) => {
 	// Avoid redirecting the root path or favicon requests which browsers often make.
