@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<script type="module">
+		import fmPromise from "../fm-promise.js"
+
+		/* SAMPLE FUNCTIONALITY, REPLACE WITH YOUR OWN CODE */
+
+		// STRONGLY RECOMMENDED: enable Safari dev tools debugging in your Web Viewers as described at:
+		// https://blog.beezwax.net/2020/05/26/how-to-enable-webkit-and-javascript-debugging-in-filemaker-web-viewers/
+
+		window.onload = async function () {
+			const calc = 'Get(DocumentsPath) & "fmPromise/" & get ( FileName ) & "/"';
+			const path = '???' ; //  await fmPromise.evaluate(calc);
+			document.getElementById('pathToFile').innerText = path;
+		}
+		/* END SAMPLE FUNCTIONALITY */
+	</script>
+	<style>
+		html, body {
+			height: 100%;
+			margin: 0;
+			padding: 4px;
+		}
+
+		body {
+			font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+			color: #707070;
+		}
+	</style>
+</head>
+<body>
+
+<h3>360Works FMPromise Add-On</h3>
+
+<p>This is your new module! It has been written to <code id="pathToFile">&hellip;</code></p>
+
+<p>Edit the document there, and click <strong>Package</strong> to see your changes in the Web Viewer.</p>
+
+<p>For improved type safety, <strong>Save a Copy as XML</strong> of your database to the <code>filemaker-schema</code> directory. This will generate Typescript types and CSS from your layouts and themes.</p>
+
+<p>Read the <a href="https://github.com/shmert/fmPromise" target="_blank">FMPromise Documentation</a> for details.</p>
+
+</body>
+</html>

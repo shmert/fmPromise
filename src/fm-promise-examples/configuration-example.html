@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<script type="module">
+		import fmPromise from "fmPromise-github/src/fm-promise.js";
+
+		window.onload = async function() {
+			await fmPromise.loadModule('fm-promise-config-form.js');
+			const config = await fmPromiseConfiguration.show({
+				simpleText:'text',
+				complexText: {
+					type:'text',
+					required:false,
+					minLength:5,
+					maxLength:10,
+					placeholder:'5-10 chars'
+				},
+				script:{type:'script', required:false},
+				field:{type:'field', required:false},
+				boolean:{type: 'boolean'},
+				number:{type: 'number', min:1, max:100, placeholder:'1-100', required:false},
+				color:{type: 'color', required:false},
+				layout:{type: 'layout', required:false},
+				layoutObject:{type: 'layoutObject', required:false},
+				relationship:{type: 'relationship', required:false},
+				valueList:{type: 'valueList', required:false},
+				fieldFilteredNonGlobal: {
+					label:'Field Filtered (no globals)',
+					type:'field',
+					required: false,
+					tableFilter: f => f.name !== 'fmPromiseModule',
+					columnFilter: c => c.type.indexOf('global') === -1 // exclude globals
+				},
+
+			}, {})
+			document.getElementById('output').innerText = JSON.stringify(config, null, '\t');
+		}
+	</script>
+	<style>
+		html, body {height: 100%;margin: 0;padding: 0;}
+		p, li, div, h1, h2, h3, h4, h5 {font-family: Arial, Helvetica, sans-serif;color: #707070;}
+	</style>
+</head>
+<body>
+<p>Your custom fmPromise module can pass a configuration block to <code>fmPromise.config({myField:{type:'text'}})</code> and get back a Promise which resolves to a user-entered configuration object.</p>
+<p>This configuration object will be persisted for that web viewer.</p>
+<p>The configuration object you just filled out is below:</p>
+<pre id="output"></pre>
+</body>
+</html>

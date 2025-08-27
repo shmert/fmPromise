@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<script type="module">
+		import fmPromise from "../fm-promise.ts";
+
+		window.onload = async function() {
+			/**
+			 * @type {DataAPIRequest}
+			 */
+			const request = {layouts: 'fmPromiseModule', query: [{filename: '*html'}], sort: [{fieldName: 'filename', sortOrder: 'ascend'}]};
+			/**
+			 * @type {DataAPIRecordArray}
+			 */
+			const found = await fmPromise.executeFileMakerDataAPIRecords(request);
+			const items = found.map(row => `<li title="${row.id}">${row.filename}</li>`).join('');
+			document.getElementById('result').innerHTML = '<ul>' + items + '</ul>';
+		}
+	</script>
+	<style>
+		html, body {height: 100%;margin: 0;padding: 0;}
+		p, li, div, h1, h2, h3, h4, h5 {font-family: Arial, Helvetica, sans-serif;color: #707070;}
+	</style>
+</head>
+<body>
+<h3>fmPromise Modules, as loaded from data API metadata query</h3>
+<div id="result" style="color:#369;">Loading&hellip;</div>
+</body>
+</html>

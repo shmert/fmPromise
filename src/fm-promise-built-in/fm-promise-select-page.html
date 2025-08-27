@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<script type="module">
+		import fmPromise from "../fm-promise.js";
+
+		async function submitModuleFilename() {
+			let filename = document.getElementById('filename').value.toLowerCase();
+			try {
+				await fmPromise.performScript('fmPromise.createOrRefreshModule', {filename: filename, webViewerName: fmPromise.webViewerName});
+				document.getElementById('myForm').style.display = 'none';
+				document.getElementById('success').style.display = 'block';
+			} catch (e) {
+				document.getElementById('error').innerText = 'Error: ' + ( e.message || e );
+			}
+		}
+
+		const existing = await fmPromise.executeSql("select filename from fmPromiseModule where includeInNewFiles=0 and filename not like 'fm-promise%'")
+		document.getElementById('existing-files').append(...existing.map(f => {
+			let option = document.createElement('option');
+			option.value = f[0];
+			return option;
+		}));
+
+		document.getElementById('myForm').addEventListener('submit', submitModuleFilename)
+	</script>
+	<link type="text/css" rel="stylesheet" href="./fm-promise.css">
+	<style>
+		input {
+			width: 22em;
+		}
+
+		#success {
+			color: darkgreen;
+			font-weight: bold;
+			display: none;
+		}
+
+		#error {
+			color: darkred;
+			font-weight: bold;
+		}
+	</style>
+</head>
+<body>
+<div id="app">
+	<h3>360Works FMPromise Add-On</h3>
+	<p>You have successfully added a <a href="https://360works.com/fmpromise" target="_blank">360Works FMPromise</a> add-on web viewer to your layout! 😊</p>
+	<p>This web viewer can display an HTML page which you create. Enter a <strong>unique</strong> name for the HTML file to display:</p>
+
+	<form id="myForm" onsubmit="preventDefault()" role="form">
+		<div class="form-control">
+			<label for="filename">Unique HTML Path / Filename</label>
+			<input id="filename" name="filename" list="existing-files" placeholder="" required/>
+			<datalist id="existing-files"></datalist>
+
+			<button type="submit">Continue</button>
+		</div>
+		<div id="error"></div>
+	</form>
+
+	<div id="success">
+		<h3>Your fmPromise module has been registered!</h3>
+		Reload this web viewer to show the new module.
+	</div>
+</div>
+</body>
+</html>

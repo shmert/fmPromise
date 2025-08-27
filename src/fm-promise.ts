@@ -6,12 +6,6 @@ declare namespace FMSchema {
 	interface LayoutMap {
 	}
 }
-// This allows TypeScript to know about the custom global variable for webViewerName
-declare global {
-	interface Document {
-		$FMP_WEB_VIEWER_NAME?: string;
-	}
-}
 
 export type FMPromiseScriptRunningOption = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -25,10 +19,18 @@ export interface PerformScriptOptions {
 
 /** Parameters for a FileMaker Data API request. */
 export interface DataAPIRequest {
+	/** Defaults to 'read'. */
+	action?: 'read' | 'metaData' | 'create' | 'update' | 'delete' | 'duplicate'
+	/** Defaults to 'v1'. */
+	version?: 'v1' | 'v2' | 'vLatest'
 	/** The name of the layout to perform the action on. */
 	layouts: keyof FMSchema.LayoutMap | (string & {}); // Allow any string but autocomplete known layouts
+	/** To retrieve the data in the context of a different layout. */
+	'layout.response': keyof FMSchema.LayoutMap | (string & {}); // Allow any string but autocomplete known layouts
 	/** An array of find request objects. */
 	query?: any[];
+	/** The unique ID number of a record. You can't specify both a query and recordId key. */
+	recordId?: number;
 	/** The maximum number of records to return. */
 	limit?: number;
 	/** The number of records to skip before returning results. */
@@ -50,14 +52,6 @@ export type DataAPIRecordArray<T> = T[] & {
 	foundCount: number;
 	totalRecordCount: number;
 };
-
-/**
- * A data API record or portal row record
- */
-export interface DataAPIRecord {
-	recordId:number;
-	modid:number;
-}
 
 class FMPromiseError extends Error {
 	public code?: string | number;
@@ -101,8 +95,9 @@ const fmProxy: Promise<any> = Promise.race([
 
 const fmPromise = {
 	/** The name of the web viewer object in FileMaker. */
-	webViewerName: document.$FMP_WEB_VIEWER_NAME || new URLSearchParams(window.location.search).get('webViewerName') || 'fmPromiseWebViewer',
-
+	get webViewerName() {
+		return window.FMPROMISE_WEB_VIEWER_NAME || new URLSearchParams(window.location.search).get('webViewerName') || 'fmPromiseWebViewer';
+	},
 	/**
 	 * Performs a FileMaker script and returns a Promise.
 	 * @template T The expected type of the script result.
@@ -342,6 +337,7 @@ declare global {
 		fmPromise: typeof fmPromise;
 		fmPromise_Resolve: (promiseId: number, result: any) => void;
 		fmPromise_Reject: (promiseId: number, errorString: string) => void;
+		FMPROMISE_WEB_VIEWER_NAME?: string;
 	}
 }
 

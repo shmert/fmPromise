@@ -18,50 +18,67 @@ const distDir = path.resolve(projectRoot, 'dist');
 const schemaDir = path.resolve(projectRoot, 'filemaker-schema');
 
 // --- API ENDPOINTS ---
-
 /**
  * Builds a specific web viewer application using Vite and returns the bundled HTML.
- * This is called by the FileMaker "Dev Assistant" script in "Production" mode.
+ * - If path ends in .html, it builds that file.
+ * - Otherwise, it assumes the path is a directory and builds its index.html.
  */
-app.get('/build/:moduleID', (req: Request, res: Response) => {
-	const {moduleID} = req.params;
+app.get('/build/{*path}', (req: Request, res: Response) => {
+	// @ts-ignore
+	const requestedPath = (req.params.path as string[] || []).join('/');
 
-	if (!moduleID || !/^[a-zA-Z0-9_-]+$/.test(moduleID)) {
-		return res.status(400).send('Invalid moduleID parameter.');
+	if (!requestedPath) {
+		return res.status(400).send('<h1>Build Error</h1><p>No build path specified.</p>');
 	}
 
-	console.log(`[Server] Received build request for: ${moduleID}`);
+	// Determine the target directory and the entry filename
+	const buildTargetDir = path.dirname(requestedPath);
+	const buildEntryFile = path.basename(requestedPath);
+
+	console.log(`[Server] Received build request for: src/${requestedPath}`);
 
 	const buildCommand = 'npx vite build';
 	const buildOptions = {
-		env: {...process.env, VITE_BUILD_TARGET: moduleID},
+		env: {
+			...process.env,
+			VITE_BUILD_TARGET_DIR: buildTargetDir,
+			VITE_BUILD_ENTRY_FILE: buildEntryFile,
+		},
 		cwd: projectRoot,
 	};
 
 	exec(buildCommand, buildOptions, async (error, stdout, stderr) => {
+		console.log(`[Server] Vite stdout:\n${stdout}`);
+		if (stderr) {
+			console.error(`[Server] Vite stderr:\n${stderr}`);
+		}
+
 		if (error) {
-			console.error(`[Server] Build failed for "${moduleID}": ${error.message}`);
-			// Send a formatted error page back to FileMaker for easier debugging
+			console.error(`[Server] Build failed for "src/${requestedPath}": ${error.message}`);
 			res.status(500).send(`
-                <html>
-                    <body style="font-family: sans-serif;">
-                        <h1>Build Failed: ${moduleID}</h1>
-                        <hr>
-                        <h3>Error Message:</h3>
-                        <pre style="background: #eee; padding: 1em;">${error.message}</pre>
-                        <h3>Standard Error:</h3>
-                        <pre style="background: #eee; padding: 1em;">${stderr}</pre>
-                        <h3>Standard Output:</h3>
-                        <pre style="background: #eee; padding: 1em;">${stdout}</pre>
-                    </body>
-                </html>`);
+				<html>
+					<body style="font-family: sans-serif;">
+						<h1>Build Failed: src/${requestedPath}</h1>
+						<hr>
+						<h3>Error Message:</h3>
+						<pre style="background: #eee; padding: 1em;">${error.message}</pre>
+						<h3>Standard Error:</h3>
+						<pre style="background: #eee; padding: 1em;">${stderr}</pre>
+						<h3>Standard Output:</h3>
+						<pre style="background: #eee; padding: 1em;">${stdout}</pre>
+					</body>
+				</html>`);
 			return;
 		}
 
-		console.log(`[Server] Build successful for "${moduleID}"`);
+		console.log(`[Server] Build successful for "src/${requestedPath}"`);
 
 		try {
-			const bundledHtmlPath = path.join(distDir, 'index.html');
+			// Vite's output file will be named after the input file, in the dist dir.
+			const outputFileName = path.basename(requestedPath);
+			const bundledHtmlPath = path.join(distDir, outputFileName);
+
+			console.log(`[Server] Attempting to read bundled file from: ${bundledHtmlPath}`);
 			const bundledHtml = await fs.readFile(bundledHtmlPath, 'utf8');
 			console.log(`[Server] Sending bundled file (${(bundledHtml.length / 1024).toFixed(2)} KB).`);
 			res.send(bundledHtml);
@@ -71,7 +88,11 @@ app.get('/build/:moduleID', (req: Request, res: Response) => {
 		}
 	});
 });
-
+app.get('{*path}', (req: Request, res: Response) => {
+	// Avoid redirecting the root path or favicon requests which browsers often make.
+	res.status(404).send('<h1>Not Found</h1><p>Please use the /build/path endpoint.</p>');
+	return;
+});
 
 // --- FILE WATCHER FOR TYPE GENERATION ---
 
@@ -80,34 +101,34 @@ app.get('/build/:moduleID', (req: Request, res: Response) => {
  * @param {string} xmlFilePath - The path to the changed XML file.
  */
 async function handleSchemaChange(xmlFilePath: string): Promise<void> {
-    // Filter out any non-XML files that the watcher might pick up (e.g., .DS_Store)
-    if (!xmlFilePath.toLowerCase().endsWith('.xml')) {
-        return;
-    }
+	// Filter out any non-XML files that the watcher might pick up (e.g., .DS_Store)
+	if (!xmlFilePath.toLowerCase().endsWith('.xml')) {
+		return;
+	}
 
-    const fileName = path.basename(xmlFilePath);
-    console.log(`[Watcher] XML file event detected: ${fileName}.`);
-    try {
-        await generateTypesFromXml(xmlFilePath, projectRoot);
-    } catch (e) {
-        console.error(`[Watcher] Error generating types for ${fileName}:`, e);
-    }
+	const fileName = path.basename(xmlFilePath);
+	console.log(`[Watcher] XML file event detected: ${fileName}.`);
+	try {
+		await generateTypesFromXml(xmlFilePath, projectRoot);
+	} catch (e) {
+		console.error(`[Watcher] Error generating types for ${fileName}:`, e);
+	}
 }
 
 console.log(`[Watcher] Initializing schema watcher...`);
 // Chokidar v4 watches directories; we filter for .xml files in the handler.
 const watcher = chokidar.watch(schemaDir, {
-    persistent: true,
-    awaitWriteFinish: {
-        stabilityThreshold: 250,
-    },
+	persistent: true,
+	awaitWriteFinish: {
+		stabilityThreshold: 250,
+	},
 });
 
 watcher
-    .on('add', (path: string) => handleSchemaChange(path))
-    .on('change', (path: string) => handleSchemaChange(path))
-    .on('ready', () => console.log('[Watcher] Initial scan complete. Ready for changes in the schema directory.'))
-    .on('error', (error) => console.error(`[Watcher] Error: ${error}`));
+	.on('add', (path: string) => handleSchemaChange(path))
+	.on('change', (path: string) => handleSchemaChange(path))
+	.on('ready', () => console.log('[Watcher] Initial scan complete. Ready for changes in the schema directory.'))
+	.on('error', (error: any) => console.error(`[Watcher] Error: ${error}`));
 
 // --- START SERVER ---
 

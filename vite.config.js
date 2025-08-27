@@ -1,37 +1,45 @@
+// vite.config.js
 import {defineConfig} from 'vite';
 import {viteSingleFile} from 'vite-plugin-singlefile';
 import path from 'path';
 import {fileURLToPath} from 'url';
 
-// Resolve __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Read the target directory from the environment variable set by our dev server.
-const targetView = process.env.VITE_BUILD_TARGET;
+// These will be provided by the fm-promise-server
+const targetDir = process.env.VITE_BUILD_TARGET_DIR; // e.g., 'foo'
+const entryFile = process.env.VITE_BUILD_ENTRY_FILE;   // e.g., 'hello-world.html'
 
-if (!targetView) {
-	throw new Error(
-		'VITE_BUILD_TARGET environment variable not set. ' +
-		'This script should be run by the fm-promise-server, which sets this variable.'
-	);
+if (!targetDir || !entryFile) {
+	throw new Error('VITE_BUILD_TARGET_DIR and VITE_BUILD_ENTRY_FILE environment variables must be set.');
 }
 
+// The two critical paths, constructed dynamically
+const rootPath = path.resolve(__dirname, 'src', targetDir);
+const inputPath = path.resolve(rootPath, entryFile);
+
 export default defineConfig({
-	// The root now correctly points directly to the target directory at the project root.
-	root: path.resolve(__dirname, targetView),
+	// The root is now dynamic, based on the server's request.
+	root: rootPath,
 
 	base: './',
 
-	plugins: [viteSingleFile()],
+	plugins: [
+		viteSingleFile()
+	],
 
 	build: {
 		outDir: path.resolve(__dirname, 'dist'),
-		minify: false,
-		emptyOutDir: true
+		emptyOutDir: true,
+		minify: true, // Or true, as needed
+		cssMinify:true,
+		rollupOptions: {
+			// The input is the absolute path to the requested HTML file.
+			input: inputPath,
+		},
+		modulePreload: {
+			polyfill: false
+		}
 	},
-
-	server: {
-		cors: true
-	}
 });

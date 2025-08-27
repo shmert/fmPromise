@@ -1,0 +1,10 @@
+html, body {
+	height: 100%;
+	margin: 0;
+	padding: 5px;
+}
+
+body {
+	font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+	color: #707070;
+}

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<style>
+		html, body {height: 100%;margin: 0;padding: 0;}
+		p, li, div, h1, h2, h3, h4, h5 {font-family: Arial, Helvetica, sans-serif;color: #707070;}
+
+        label {
+            font-weight: bold;
+        }
+
+        #content {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        textarea {
+            flex-grow: 1;
+        }
+
+        #evalControls {
+            float: right;
+        }
+
+        textarea.error {
+            background-color: #ffe0e5;
+			font-weight: bold;
+            color: red;
+        }
+	</style>
+	<script type="module">
+		import fmPromise from "../fm-promise.ts";
+
+		document.getElementById('goButton').addEventListener('click', async () => {
+			let resultArea = document.getElementById('result');
+			try {
+				const exp = document.getElementById('expression').value;
+				resultArea.value = await fmPromise.evaluate(exp);
+				resultArea.classList.remove('error');
+			} catch (e) {
+				resultArea.value = 'Error: ' + JSON.stringify(e, null, 4);
+				resultArea.classList.add('error');
+			}
+		});
+	</script>
+</head>
+<body>
+
+<div id="content">
+	<label for="expression">Expression</label>
+	<textarea cols="30" id="expression" name="expression" rows="10">"Wake up, " & Get ( Username ) & ", it's " & get(CurrentTime) & "!"</textarea>
+	<div>
+		<div id="evalControls">
+			<!--			<label for="autoEval"><input id="autoEval" name="autoEval" type="checkbox">Automatically Evaluate</label>-->
+			<button id="goButton">Evaluate</button>
+		</div>
+		<label for="result">Result</label>
+	</div>
+	<textarea cols="30" id="result" name="result" rows="10"></textarea>
+</div>
+
+</body>
+</html>
