@@ -10,6 +10,8 @@ import {generateTypesFromXml} from './generate-types.js';
 const PORT = 4000;
 const app = express();
 
+const fileExists = (filePath: string) => fs.access(filePath, fs.constants.F_OK).then(() => true).catch(() => false);
+
 // Resolve paths relative to the project root
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,10 +27,15 @@ const schemaDir = path.resolve(projectRoot, 'filemaker-schema');
  */
 app.get('/build/{*path}', (req: Request, res: Response) => {
 	// @ts-ignore
-	const requestedPath = (req.params.path as string[] || []).join('/');
+	let requestedPath = (req.params.path as string[] || []).join('/');
 
 	if (!requestedPath) {
 		return res.status(400).send('<h1>Build Error</h1><p>No build path specified.</p>');
+	}
+
+	if (!requestedPath.toLowerCase().endsWith('.html')) {
+		// Use path.join to correctly handle the optional trailing slash.
+		requestedPath = path.join(requestedPath, 'index.html');
 	}
 
 	// Determine the target directory and the entry filename
@@ -88,6 +95,96 @@ app.get('/build/{*path}', (req: Request, res: Response) => {
 		}
 	});
 });
+
+/**
+ * Scaffolds a new web viewer module in the src directory.
+ * Expects a path like "my-module" or "my-module/app.html".
+ */
+app.post('/init/{*path}', async (req: Request, res: Response) => {
+	// @ts-ignore
+	const requestedPath = (req.params.path as string[] || []).join('/');
+	if (!requestedPath) {
+		return res.status(400).send({ error: 'Module path cannot be empty.' });
+	}
+
+	const srcDir = path.resolve(projectRoot, 'src');
+	const templatesDir = path.resolve(__dirname, 'templates');
+
+	let targetDir: string;
+	let htmlFileName: string;
+	const tsFileName = 'main.ts';
+	const cssFileName = 'styles.css';
+
+	if (requestedPath.toLowerCase().endsWith('.html')) {
+		targetDir = path.join(srcDir, path.dirname(requestedPath));
+		htmlFileName = path.basename(requestedPath);
+	} else {
+		targetDir = path.join(srcDir, requestedPath);
+		htmlFileName = 'index.html';
+	}
+
+	const htmlPath = path.join(targetDir, htmlFileName);
+	const tsPath = path.join(targetDir, tsFileName);
+	const cssPath = path.join(targetDir, cssFileName);
+
+	console.log(`[Server] Processing init request for module at: ${targetDir}`);
+
+	try {
+		// Ensure the target directory exists before we start processing files
+		await fs.mkdir(targetDir, { recursive: true });
+
+		// Read the raw template files once
+		const [htmlTemplate, tsTemplate, cssTemplate] = await Promise.all([
+			fs.readFile(path.join(templatesDir, 'module.html'), 'utf8'),
+			fs.readFile(path.join(templatesDir, 'module.ts'), 'utf8'),
+			fs.readFile(path.join(templatesDir, 'module.css'), 'utf8'),
+		]);
+
+		// Prepare a list of files to process
+		const filesToProcess = [
+			{ path: htmlPath, content: htmlTemplate.replace('{{tsFileName}}', tsFileName).replace('{{cssFileName}}', cssFileName) },
+			{ path: tsPath, content: tsTemplate },
+			{ path: cssPath, content: cssTemplate },
+		];
+
+		// Process each file: write it if it doesn't exist, and record the outcome.
+		const results = await Promise.all(filesToProcess.map(async (file) => {
+			if (await fileExists(file.path)) {
+				console.log(`[Server] -> File exists, skipping: ${path.basename(file.path)}`);
+				return { path: file.path, status: 'exists' };
+			} else {
+				await fs.writeFile(file.path, file.content, 'utf8');
+				console.log(`[Server] -> File created: ${path.basename(file.path)}`);
+				return { path: file.path, status: 'created' };
+			}
+		}));
+
+		const createdFiles = results.filter(r => r.status === 'created').map(r => path.basename(r.path));
+		const existingFiles = results.filter(r => r.status === 'exists').map(r => path.basename(r.path));
+
+		let message = '';
+		if (createdFiles.length > 0) {
+			message += `${createdFiles.join(', ')} ${createdFiles.length > 1 ? 'were' : 'was'} created. `;
+		}
+		if (existingFiles.length > 0) {
+			message += `${existingFiles.join(', ')} already ${existingFiles.length > 1 ? 'exist' : 'exists'} and ${existingFiles.length > 1 ? 'were' : 'was'} not changed.`;
+		}
+		// --- END: Added code ---
+
+		res.status(200).send({
+			success: true,
+			message: message.trim(), // Add the new message here
+			absolutePath: htmlPath,
+			files: results
+		});
+
+	} catch (error) {
+		console.error(`[Server] ✘ Failed to process module at "${requestedPath}":`, error);
+		res.status(500).send({ error: 'An unexpected error occurred on the server.' });
+	}
+});
+
+
 app.get('{*path}', (req: Request, res: Response) => {
 	// Avoid redirecting the root path or favicon requests which browsers often make.
 	res.status(404).send('<h1>Not Found</h1><p>Please use the /build/path endpoint.</p>');

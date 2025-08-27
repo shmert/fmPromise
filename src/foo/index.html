@@ -1,8 +1,0 @@
-<!doctype html>
-Hello {{name}}
-
-<script type="module"  >
-	import fmPromise from 'fmPromise-github/src/fm-promise.ts';
-	let user = await fmPromise.evaluate('Get(UserName)')
-	document.body.innerText = 'Hello, ' + user;
-</script>
