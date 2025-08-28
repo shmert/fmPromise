@@ -1,0 +1,13 @@
+/* Starter styles for your new fmPromise module */
+body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+	margin: 0;
+	padding: 0;
+}
+
+#app {
+	padding: 1rem;
+	border: 1px solid #dee2e6;
+	border-radius: 0.5rem;
+	background-color: #ffffff;
+}
