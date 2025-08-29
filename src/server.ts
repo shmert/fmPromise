@@ -7,9 +7,9 @@ import {scaffoldModule} from './scaffolder.js';
 const PORT = 4000;
 
 const server = http.createServer(async (request, response) => {
-	// Use the full URL to easily parse pathname and query params
-	const requestUrl = new URL(request.url || '/', `http://${request.headers.host}`);
-	const {method, pathname} = requestUrl;
+	const {method, url} = request;
+	let pathname = (url || '/').split('?')[0];
+	console.log(`Got ${method} request for ${url} pathname ${pathname}`)
 
 	try {
 		// --- PING ROUTE ---
@@ -38,7 +38,7 @@ const server = http.createServer(async (request, response) => {
 			}
 
 			// Check for the 'minify' query parameter. It's only true if the string is exactly 'true'.
-			const shouldMinify = requestUrl.searchParams.get('minify') !== 'false';
+			const shouldMinify = url?.includes('minify=false') === false;
 
 			const html = await buildModule(modulePath, shouldMinify);
 			response.writeHead(200, {'Content-Type': 'text/html'});
