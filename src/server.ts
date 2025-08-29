@@ -1,16 +1,17 @@
 import http from 'http';
 import path from 'path';
+import {URL} from 'url'; // Import the URL class
 import {buildModule} from './viteBuilder.js';
 import {scaffoldModule} from './scaffolder.js';
 
 const PORT = 4000;
 
 const server = http.createServer(async (request, response) => {
-	const {method, url} = request;
-	const pathname = url || '/';
+	// Use the full URL to easily parse pathname and query params
+	const requestUrl = new URL(request.url || '/', `http://${request.headers.host}`);
+	const {method, pathname} = requestUrl;
 
 	try {
-		console.log('Got a request for pathname ' + pathname);
 		// --- PING ROUTE ---
 		if (method === 'GET' && pathname === '/ping') {
 			response.writeHead(200, {'Content-Type': 'application/json'});
@@ -36,7 +37,10 @@ const server = http.createServer(async (request, response) => {
 				modulePath = path.join(modulePath, 'index.html');
 			}
 
-			const html = await buildModule(modulePath);
+			// Check for the 'minify' query parameter. It's only true if the string is exactly 'true'.
+			const shouldMinify = requestUrl.searchParams.get('minify') !== 'false';
+
+			const html = await buildModule(modulePath, shouldMinify);
 			response.writeHead(200, {'Content-Type': 'text/html'});
 			response.end(html);
 
@@ -48,12 +52,9 @@ const server = http.createServer(async (request, response) => {
 	} catch (error: any) {
 		console.error(`Error processing request ${method} ${pathname}:`, error);
 
-		// Send JSON error for API-like routes (/init)
 		if (pathname.startsWith('/init/')) {
 			response.writeHead(500, {'Content-Type': 'application/json'});
 			response.end(JSON.stringify({success: false, message: error.message}));
-
-			// Send HTML error for user-facing routes (/build)
 		} else if (pathname.startsWith('/build/')) {
 			const modulePath = pathname.replace('/build/', '');
 			response.writeHead(500, {'Content-Type': 'text/html'});
@@ -66,8 +67,6 @@ const server = http.createServer(async (request, response) => {
 						<pre style="background: #eee; padding: 1em; border-radius: 5px;">${error.message}</pre>
 					</body>
 				</html>`);
-
-			// Generic error for other cases
 		} else {
 			response.writeHead(500, {'Content-Type': 'text/plain'});
 			response.end('Internal Server Error');
