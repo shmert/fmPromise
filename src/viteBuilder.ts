@@ -1,38 +1,46 @@
-import {build} from 'vite';
-import {viteSingleFile} from 'vite-plugin-singlefile';
+import { build } from 'vite';
+import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'path';
-import type {OutputAsset} from 'rollup';
+import type { OutputAsset } from 'rollup';
 
-export const buildModule = async (modulePath: string): Promise<string> => {
-	const root = process.cwd();
-	const inputFile = path.resolve(root, 'src', modulePath, 'index.html');
+export const buildModule = async (moduleHtmlPath: string): Promise<string> => {
+	// e.g., /path/to/project/src/my-module/index.html
+	const absoluteInputFile = path.resolve(process.cwd(), 'src', moduleHtmlPath);
+
+	// The fix: The 'root' of the build must be the directory containing the HTML file.
+	// This ensures that relative links inside the HTML (like "./module.ts") resolve correctly.
+	const buildRoot = path.dirname(absoluteInputFile);
 
 	const result = await build({
-		root: path.dirname(inputFile),
+		// Use the directory of the target file as the root for this specific build.
+		root: buildRoot,
 		plugins: [viteSingleFile()],
 		logLevel: 'silent',
 		build: {
+			// Build in memory, not to disk
 			write: false,
+			// Prevent vite from creating an /assets subfolder in the virtual output
+			minify:false,
+			assetsDir: '',
 			rollupOptions: {
 				input: {
-					index: inputFile,
+					// We can use the absolute path directly for the input.
+					index: absoluteInputFile,
 				},
 			},
 		},
 	});
 
-	// Type guard to ensure we have a RollupOutput with an 'output' array
 	if (!('output' in result)) {
 		throw new Error('Vite build did not return a valid output.');
 	}
 
-	// Find the first OutputAsset in the result, which will be our HTML file.
 	const htmlAsset = result.output.find(
-		(item): item is OutputAsset => item.type === 'asset'
+		(item): item is OutputAsset => item.type === 'asset' && item.fileName.endsWith('.html')
 	);
 
 	if (!htmlAsset || typeof htmlAsset.source !== 'string') {
-		throw new Error('Vite build did not produce an HTML asset.');
+		throw new Error(`Vite build did not produce a valid HTML file for: ${moduleHtmlPath}`);
 	}
 
 	return htmlAsset.source;

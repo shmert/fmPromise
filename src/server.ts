@@ -10,6 +10,7 @@ const server = http.createServer(async (request, response) => {
 	const pathname = url || '/';
 
 	try {
+		console.log('Got a request for pathname ' + pathname);
 		// --- PING ROUTE ---
 		if (method === 'GET' && pathname === '/ping') {
 			response.writeHead(200, {'Content-Type': 'application/json'});

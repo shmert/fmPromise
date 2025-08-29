@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<script type="module">
+		import fmPromise from "@360works/fmpromise";
+
+		// --- DOM Element References ---
+		const mainContent = document.getElementById('main-content');
+		const setupInstructions = document.getElementById('setup-instructions');
+		const fmErrorInstructions = document.getElementById('fm-error-instructions');
+		const myForm = document.getElementById('myForm');
+		const successDiv = document.getElementById('success');
+		const errorDiv = document.getElementById('error');
+		const datalist = document.getElementById('existing-files');
+		const filenameInput = document.getElementById('filename');
+		const submitButton = myForm.querySelector('button');
+
+		/** Helper to show a specific view and hide others */
+		function showView(viewId) {
+			[mainContent, setupInstructions, fmErrorInstructions].forEach(el => el.style.display = 'none');
+			document.getElementById(viewId).style.display = 'block';
+		}
+
+		/** Handles the form submission to create a new module. */
+		async function handleFormSubmit(event) {
+			event.preventDefault();
+			const originalButtonText = submitButton.textContent;
+			submitButton.disabled = true;
+			submitButton.textContent = 'Working...';
+			errorDiv.textContent = '';
+
+			try {
+				const filename = filenameInput.value.trim().toLowerCase();
+				await fmPromise.performScript('fmPromise.createOrRefreshModule', { filename, webViewerName: fmPromise.webViewerName });
+				myForm.style.display = 'none';
+				successDiv.style.display = 'block';
+			} catch (e) {
+				errorDiv.textContent = 'Error: ' + (e.message || e);
+				submitButton.disabled = false;
+				submitButton.textContent = originalButtonText;
+			}
+		}
+
+		/** Main function to initialize the page and check connections. */
+		async function main() {
+			let existingModules = [];
+			let pingAddress = '';
+
+			// --- Stage 1: Check FileMaker Bridge ---
+			try {
+				[existingModules, pingAddress] = await Promise.all([
+					fmPromise.executeSql`select filename from fmPromiseModule where includeInNewFiles=0 and filename not like 'fm-promise%'`,
+					fmPromise.evaluate('_fmPromiseServerAddress')
+				]);
+				pingAddress = new URL(pingAddress + '/ping').toString(); // validate the address
+			} catch (e) {
+				console.error("FileMaker bridge error:", e);
+				showView('fm-error-instructions');
+				return; // Stop execution
+			}
+
+			// --- Stage 2: Check Dev Server Connection ---
+			if (!pingAddress) {
+				// Show a specific part of the setup instructions if the variable isn't set
+				document.getElementById('server-address-warning').style.display = 'block';
+				showView('setup-instructions');
+				return;
+			}
+
+			try {
+				const pingResult = await fmPromise.insertFromUrl(pingAddress);
+				if (!pingResult.success) throw new Error('Invalid ping response');
+
+				// --- Success State: Everything is working ---
+				datalist.append(...existingModules.map(f => {
+					let option = document.createElement('option');
+					option.value = f[0];
+					return option;
+				}));
+				showView('main-content');
+				myForm.addEventListener('submit', handleFormSubmit);
+
+			} catch (e) {
+				console.error("Dev server connection error:", e);
+				showView('setup-instructions');
+			}
+		}
+
+		main();
+	</script>
+	<style>
+		/* (Styles are the same as the previous, robust version) */
+		html, body {
+			height: 100%; margin: 0; padding: 1.5rem;
+			font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+			color: #333; background-color: #f8f9fa;
+		}
+		a { color: #007bff; }
+		h3, p { margin-top: 0; margin-bottom: 1rem; }
+		strong { color: #000; }
+		#success { color: #28a745; display: none; }
+		#error, #fm-error-details { color: #dc3545; font-weight: bold; min-height: 1.2em; }
+		.content-box { padding: 1.5rem; background: #fff; border: 1px solid #dee2e6; border-radius: 0.5rem; }
+		#setup-instructions, #main-content, #success, #fm-error-instructions { display: none; }
+		.form-control { display: flex; flex-direction: column; gap: 0.75rem; }
+		input { width: 100%; padding: 0.5rem; border-radius: 0.25rem; border: 1px solid #ced4da; }
+		button { padding: 0.5rem 1rem; border: none; border-radius: 0.25rem; background-color: #007bff; color: white; cursor: pointer; }
+		button:disabled { background-color: #6c757d; cursor: wait; }
+		code { background-color: #e9ecef; padding: 0.2em 0.4em; border-radius: 3px; }
+		ol { padding-left: 1.5rem; }
+		#server-address-warning { color: #dc3545; font-weight: bold; display: none; border: 1px solid; padding: 0.5rem; border-radius: 0.25rem;}
+	</style>
+</head>
+<body>
+	<h3>360Works fmPromise Add-On</h3>
+
+	<!-- View 1: Shown for FileMaker Bridge errors -->
+	<div id="fm-error-instructions" class="content-box">
+		<h4>FileMaker Configuration Error</h4>
+		<p>The web viewer cannot communicate with FileMaker. Please check the following:</p>
+		<ol>
+			<li>The web viewer object is configured to <strong>"Allow JavaScript to Perform FileMaker Scripts"</strong>.</li>
+			<li>The web viewer object name is <code>fmPromiseWebViewer</code>.</li>
+			<li>The fmPromise scripts and custom functions were installed correctly.</li>
+		</ol>
+		<div id="fm-error-details">Could not execute a FileMaker script from JavaScript.</div>
+	</div>
+
+	<!-- View 2: Shown if dev server is offline -->
+	<div id="setup-instructions" class="content-box">
+		<h4>Welcome to fmPromise!</h4>
+		<p>To create new web viewer modules, you need to run the local development server.</p>
+		<p>Please follow these steps in a terminal in your project's root directory:</p>
+		<ol>
+			<li>
+				<strong>Install the package:</strong>
+				<code>npm install @360works/fmpromise</code>
+			</li>
+			<li>
+				<strong>Add the dev script (recommended):</strong><br>
+				For convenience, add the following to the <code>"scripts"</code> section of your project's <code>package.json</code> file:
+				<pre><code>"scripts": {"dev": "fmpromise-dev"}</code></pre>
+			</li>
+			<li>
+				<strong>Start the development server:</strong>
+				<code>npm run dev</code>
+			</li>
+			<li>Once the server is running, <strong>Reload this Web Viewer</strong>.</li>
+		</ol>
+		<p>Alternatively, you can run the server directly at any time with <code>npx fmpromise-dev</code>.</p>
+
+		<div id="server-address-warning">
+			<strong>Warning:</strong> The FileMaker global variable <code>$$fmPromise_Server_Address</code> is not set or is invalid. Please ensure the "fmPromise.OnFirstWindowOpen" script has run correctly.
+		</div>
+		<div id="error">Could not connect to the local development server.</div>
+	</div>
+	<!-- View 3: Shown on success -->
+	<div id="main-content" class="content-box">
+		<p>You have successfully added a fmPromise web viewer to your layout! 😊</p>
+		<p>Enter a <strong>unique path and/or filename</strong> for a new module:</p>
+		<form id="myForm" role="form">
+			<div class="form-control">
+				<label for="filename">New Module Path (e.g., "invoices/main.html")</label>
+				<input id="filename" name="filename" list="existing-files" placeholder="my-first-module" required/>
+				<datalist id="existing-files"></datalist>
+				<button type="submit">Create Module</button>
+			</div>
+		</form>
+	</div>
+
+	<!-- View 4: Shown after successful module creation -->
+	<div id="success" class="content-box">
+		<h3>Your fmPromise module has been created!</h3>
+		<p>The server has created the new files in your project's <code>src</code> directory.</p>
+		<p>You may now close this setup panel and reload the web viewer to display the new module.</p>
+	</div>
+</body>
+</html>

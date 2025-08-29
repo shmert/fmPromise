@@ -1,0 +1,12 @@
+<!doctype html>
+<script type="module">
+	import fmPromise from "@360works/fmpromise";
+
+	try {
+		let user = await fmPromise.evaluate('Get(UserName)')
+		document.body.innerText = `Hello, ${user}!`;
+	} catch (e) {
+		console.log(e);
+		document.body.innerText = 'Error: ' + e;
+	}</script>
+<body>Loading&hellip;</body>
