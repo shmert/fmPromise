@@ -51,8 +51,8 @@ export const scaffoldModule = async (htmlFilePath: string): Promise<ScaffoldResu
 
 	const filesToCreate = [
 		{templateName: 'module.html', finalName: htmlFileName},
-		{templateName: 'module.ts', finalName: 'main.ts'},
-		{templateName: 'module.css', finalName: 'style.css'},
+		{templateName: 'main.ts', finalName: 'main.ts'},
+		{templateName: 'style.css', finalName: 'style.css'},
 	];
 
 	for (const file of filesToCreate) {

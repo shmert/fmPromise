@@ -1,6 +1,6 @@
 {
   "name": "@360works/fmpromise",
-  "version": "3.0.0",
+  "version": "2.0.0",
   "description": "A modern JS toolkit for FileMaker Web Viewers, including a dev server and type generation.",
   "type": "module",
   "bin": {
@@ -36,6 +36,7 @@
     "@types/node": "^24.3.0",
     "copyfiles": "^2.4.1",
     "nodemon": "^3.1.10",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "chokidar": "^3.5.3"
   }
 }
