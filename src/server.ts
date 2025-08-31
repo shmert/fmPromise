@@ -1,73 +1,85 @@
 import http from 'http';
 import path from 'path';
+import fs from 'fs/promises';
 import {URL} from 'url';
 import chokidar from 'chokidar';
 import {buildModule} from './viteBuilder.js';
 import {scaffoldModule} from './scaffolder.js';
 
 const PORT = 4000;
-
-// --- Live Reload Connection Manager ---
-// This will hold all active client connections for Server-Sent Events.
 let clients: http.ServerResponse[] = [];
-
 const sendReloadEvent = () => {
-	console.log('[Live Reload] File change detected. Sending reload signal to clients...');
 	clients.forEach(client => client.write('data: reload\n\n'));
 };
 
-// --- Main Server Logic ---
+
 const server = http.createServer(async (request, response) => {
 	const {method, url} = request;
 	const requestUrl = new URL(url || '/', `http://${request.headers.host}`);
 	const {pathname, searchParams} = requestUrl;
-	console.log(`Got ${method} request for ${requestUrl.pathname}`);
+	console.log(`Got ${method} request for ${pathname}`);
 
 	try {
 		// --- PING ROUTE ---
-		if (method === 'GET' && pathname === '/ping') {
+		if (pathname === '/ping') {
+			if (method !== 'GET') throw new Error(`Method ${method} not allowed for /ping.`);
 			response.writeHead(200, {'Content-Type': 'application/json'});
 			response.end(JSON.stringify({success: true, message: 'pong'}));
 
 			// --- LIVE RELOAD EVENT STREAM ---
-		} else if (method === 'GET' && pathname === '/events') {
+		} else if (pathname === '/events') {
+			if (method !== 'GET') throw new Error(`Method ${method} not allowed for /events.`);
 			response.writeHead(200, {
 				'Content-Type': 'text/event-stream',
-				'Connection': 'keep-alive',
+				Connection: 'keep-alive',
 				'Cache-Control': 'no-cache',
 			});
 			clients.push(response);
-			console.log(`[Live Reload] Client connected. Total clients: ${clients.length}`);
-
 			request.on('close', () => {
 				clients = clients.filter(c => c !== response);
-				console.log(`[Live Reload] Client disconnected. Total clients: ${clients.length}`);
 			});
 
+			// --- INFO ROUTE ---
+		} else if (pathname.startsWith('/info/')) {
+			if (method !== 'GET') throw new Error(`Method ${method} not allowed for /info.`);
+			const modulePath = pathname.replace('/info/', '');
+			const fullPath = path.resolve(process.cwd(), 'src', modulePath);
+			const stats = await fs.stat(fullPath);
+			const info = {
+				path: modulePath,
+				fullPath: fullPath,
+				isFile: stats.isFile(),
+				isDirectory: stats.isDirectory(),
+				createdAt: stats.birthtime.toISOString(),
+				modifiedAt: stats.mtime.toISOString(),
+				size: `${stats.size} bytes`,
+			};
+			response.writeHead(200, {'Content-Type': 'application/json'});
+			response.end(JSON.stringify({success: true, data: info}));
+
 			// --- INIT ROUTE ---
-		} else if (method === 'POST' && pathname.startsWith('/init/')) {
+		} else if (pathname.startsWith('/init/')) {
+			if (method !== 'POST') throw new Error(`Method ${method} not allowed for /init.`);
 			let modulePath = pathname.replace('/init/', '');
 			if (!modulePath.toLowerCase().endsWith('.html')) {
 				modulePath = path.join(modulePath, 'index.html');
 			}
 			const result = await scaffoldModule(modulePath);
-			const message = `Scaffolding complete. Created ${result.created.length} file(s). Skipped ${result.skipped.length} existing file(s).`;
+			const message = `Scaffolding complete. Created ${result.created.length}, skipped ${result.skipped.length}.`;
 			response.writeHead(201, {'Content-Type': 'application/json'});
 			response.end(JSON.stringify({success: true, message, details: result}));
 
 			// --- BUILD ROUTE ---
-		} else if (method === 'GET' && pathname.startsWith('/build/')) {
+		} else if (pathname.startsWith('/build/')) {
+			if (method !== 'GET') throw new Error(`Method ${method} not allowed for /build.`);
 			let modulePath = pathname.replace('/build/', '');
 			if (!modulePath.toLowerCase().endsWith('.html')) {
 				modulePath = path.join(modulePath, 'index.html');
 			}
-
 			const shouldMinify = searchParams.get('minify') === 'true';
 			const useLiveReload = searchParams.get('liveReload') === 'true';
 
 			let html = await buildModule(modulePath, shouldMinify);
-
-			// Inject the live reload script if requested
 			if (useLiveReload) {
 				const liveReloadScript = `
 					<script>
@@ -86,53 +98,45 @@ const server = http.createServer(async (request, response) => {
 				`;
 				html = html.replace('</body>', `${liveReloadScript}</body>`);
 			}
-
 			response.writeHead(200, {'Content-Type': 'text/html'});
 			response.end(html);
 
 			// --- NOT FOUND ---
 		} else {
 			response.writeHead(404, {'Content-Type': 'text/html'});
-			response.end('<h1>404 Not Found</h1><p>Please use the <code>/build/path/to/your/module</code> endpoint.</p>');
+			response.end('<h1>404 Not Found</h1><p>Please use /ping, /init, /build, or /info endpoints.</p>');
 		}
+
 	} catch (error: any) {
 		console.error(`Error processing request ${method} ${pathname}:`, error);
-		if (pathname.startsWith('/init/')) {
-			response.writeHead(500, {'Content-Type': 'application/json'});
+		if (error.code === 'ENOENT') {
+			response.writeHead(404, {'Content-Type': 'application/json'});
+			response.end(JSON.stringify({success: false, message: `Path not found: ${pathname}`}));
+		} else if (error.message.includes('Method not allowed')) {
+			response.writeHead(405, {'Content-Type': 'application/json'});
 			response.end(JSON.stringify({success: false, message: error.message}));
-		} else if (pathname.startsWith('/build/')) {
-			const modulePath = pathname.replace('/build/', '');
-			response.writeHead(500, {'Content-Type': 'text/html'});
-			response.end(`
-				<html lang="en">
-					<body style="font-family: sans-serif; padding: 2em;">
-						<h1>Build Failed: ${modulePath}</h1>
-						<hr>
-						<h3>Error:</h3>
-						<pre style="background: #eee; padding: 1em; border-radius: 5px;">${error.message}</pre>
-					</body>
-				</html>`);
 		} else {
-			response.writeHead(500, {'Content-Type': 'text/plain'});
-			response.end('Internal Server Error');
+			const isApiRoute = ['/init', '/info'].some(p => pathname.startsWith(p));
+			if (isApiRoute) {
+				response.writeHead(500, {'Content-Type': 'application/json'});
+				response.end(JSON.stringify({success: false, message: error.message}));
+			} else {
+				response.writeHead(500, {'Content-Type': 'text/html'});
+				response.end(`<h1>500 - Server Error</h1><pre>${error.message}</pre>`);
+			}
 		}
 	}
 });
 
-// --- Start Server and File Watcher ---
 server.listen(PORT, () => {
 	console.log(`fmpromise-dev server started at http://localhost:${PORT}`);
-
-	// Initialize the file watcher
 	const srcDir = path.join(process.cwd(), 'src');
-	console.log(`[Live Reload] Watching for file changes in: ${srcDir} (for when liveReload=true parameter is used in /build/ requests)`);
-
+	console.log(`[Live Reload] Watching for file changes in: ${srcDir}`);
 	chokidar.watch(srcDir, {
-		ignored: /(^|[\/\\])\../, // ignore dotfiles
+		ignored: /(^|[\/\\])\../,
 		persistent: true,
-		ignoreInitial: true, // Don't fire on initial scan
-	}).on('all', (event, path) => {
-		// On any change, send the reload event.
+		ignoreInitial: true,
+	}).on('all', () => {
 		sendReloadEvent();
 	});
 });

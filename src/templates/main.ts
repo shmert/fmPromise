@@ -11,6 +11,7 @@ async function main() {
 		appElement.innerHTML = `
       <p>Hello, <strong>${userName}</strong>!</p>
       <p>This module was scaffolded by fm-promise-server.</p>
+      <p>Call the <code>fmPromise.toggleDevMode</code> script to enable / disable devMode</p>
     `;
 	} catch (error) {
 		console.error('Error fetching data from FileMaker:', error);
