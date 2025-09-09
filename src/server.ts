@@ -157,7 +157,7 @@ const server = http.createServer(async (request, response) => {
 						};
 					</script>
 				`;
-				html = html.replace('</body>', `${liveReloadScript}</body>`);
+				html += liveReloadScript
 			}
 			response.writeHead(200, {'Content-Type': 'text/html'});
 			response.end(html);

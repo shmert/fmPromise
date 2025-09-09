@@ -7,23 +7,19 @@
  */
 Let (
   [
-    leading = "'data:text/html;charset=utf-8,'" ;
+    leading = "'data:text/html,'" ;
     trailing = "'<script>FMPROMISE_WEB_VIEWER_NAME=''" & webViewerName & "'';</script>'" ;
-    sourceField = Case ( $$FMPROMISE_DEV_MODE ; "m.sourceMinified" ; "m.source" ) ;
-    configured = ExecuteSQLe ( "select " & leading & ", m.sourceMinified, " & trailing & " from fmPromiseWebViewer v join fmPromiseModule m on v.moduleId=m.id where v.id=?" ; ¶ ; ¶ ; webViewerName )
+    configured = ExecuteSQLe ( "select " & leading & ", m.sourceMinified, " & trailing & " from fmPromiseWebViewer v join fmPromiseModule m on v.moduleId=m.id where v.id=?" ; ¶ ; ¶ ; webViewerName ) ;
+    filename = ExecuteSQLe ( "select filename from fmPromiseWebViewer v join fmPromiseModule m on v.moduleId=m.id where v.id=?" ; "" ; "" ; webViewerName )
   ] ;
   Case (
    ( $$FMPROMISE_DEVMODE ) and not IsEmpty ( configured ) ;
       // read the configured module content directly from the fmPromiseServer
-      Let ( [
-          filename = ExecuteSQLe ( "select filename from fmPromiseWebViewer v join fmPromiseModule m on v.moduleId=m.id where v.id=?" ; "" ; "" ; webViewerName )
-        ] ;
-        _fmPromiseServerAddress & "/build/" & filename & "?webViewerName=" & GetAsURLEncoded ( webViewerName ) & "&liveReload=true"
-      ) ;
+      _fmPromiseServerAddress & "/build/" & filename & "?webViewerName=" & GetAsURLEncoded ( webViewerName ) & "&liveReload=true" ;
     not IsEmpty ( configured ) ;
       // return the configured minified contents in production mode
       configured ;
     // otherwise, prompt for a file name
-    ExecuteSQLe ( "select " & leading & ", " & sourceField & ", " & trailing & " from fmPromiseModule m where m.filename=?" ; ¶ ; ¶ ; "fm-promise-built-in/fm-promise-select-page.html" )
+    ExecuteSQLe ( "select " & leading & ", m.sourceMinified, " & trailing & " from fmPromiseModule m where m.filename=?" ; ¶ ; ¶ ; "fm-promise-built-in/fm-promise-select-page.html" )
   )
 )

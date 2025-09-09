@@ -14,7 +14,9 @@ export interface PerformScriptOptions {
 	/** If true, the promise will always resolve with a string, bypassing automatic JSON parsing. */
 	alwaysReturnString?: boolean;
 	/** Specifies how to handle a currently running FileMaker script. 0: Continue (default); 1: Halt; 2: Exit; 3: Resume; 4: Pause; 5: Interrupt. */
-	runningScript?: FMPromiseScriptRunningOption;
+	runningScript?: FMPromiseScriptRunningOption,
+	/** If performScript will cause the WebViewer to go away, pass `true` here to avoid errors about "Unabel to locate web viewer named…" */
+	ignoreResult?: boolean;
 }
 
 /** Parameters for a FileMaker Data API request. */
@@ -118,7 +120,7 @@ const fmPromise = {
 
 		let result = await new Promise((resolve, reject) => {
 			callbacksById[promiseId] = {resolve, reject};
-			const meta = JSON.stringify({scriptName, promiseId, webViewerName: this.webViewerName});
+			const meta = JSON.stringify({scriptName, promiseId, webViewerName: this.webViewerName, ignoreResult: options?.ignoreResult || undefined});
 			const comboParam = meta + '\n' + (scriptParameter || '');
 			const option = options.runningScript || 0;
 
