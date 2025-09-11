@@ -47,25 +47,27 @@ export const scaffoldModule = async (htmlFilePath: string): Promise<ScaffoldResu
 	// --------------------------------------------------
 
 	const htmlFileName = path.basename(htmlFilePath);
-	const templatesDir = path.join(__dirname, 'templates');
 
-	const filesToCreate = [
-		{templateName: 'module.html', finalName: htmlFileName},
-		{templateName: 'main.ts', finalName: 'main.ts'},
-		{templateName: 'style.css', finalName: 'style.css'},
-	];
+	let htmlExists = await fileExists(htmlFileName) // don't create any files if the html file already exists
+    if (!htmlExists) {
+        const templatesDir = path.join(__dirname, 'templates');
+    	const filesToCreate = [
+    		{templateName: 'module.html', finalName: htmlFileName},
+    		{templateName: 'main.ts', finalName: 'main.ts'},
+    		{templateName: 'style.css', finalName: 'style.css'},
+    	];
+        for (const file of filesToCreate) {
+            const finalPath = path.join(targetDir, file.finalName);
 
-	for (const file of filesToCreate) {
-		const finalPath = path.join(targetDir, file.finalName);
-
-		if (await fileExists(finalPath)) {
-			result.skipped.push(file.finalName);
-		} else {
-			const templatePath = path.join(templatesDir, file.templateName);
-			await fs.copyFile(templatePath, finalPath);
-			result.created.push(file.finalName);
-		}
-	}
+            if (await fileExists(finalPath)) {
+                result.skipped.push(file.finalName);
+            } else {
+                const templatePath = path.join(templatesDir, file.templateName);
+                await fs.copyFile(templatePath, finalPath);
+                result.created.push(file.finalName);
+            }
+        }
+    }
 
 	return result;
 };
