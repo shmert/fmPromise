@@ -146,8 +146,17 @@ const server = http.createServer(async (request, response) => {
 					<script>
 						console.log('[Live Reload] Connecting to dev server...');
 						const eventSource = new EventSource('/events');
-						eventSource.onmessage = function(event) {
+						eventSource.onmessage = async function(event) {
 							if (event.data === 'reload') {
+								try {
+									// register the webViewer as modified in the global fmPromise variable
+									await fmPromise.performScript('fmPromise.onLiveReload', {
+										webViewerName: fmPromise.webViewerName, 
+										path : '${modulePath}'
+									});
+								} catch (error) {
+									console.warn('Unable to set $$FMPROMISE_MODIFIED_WEBVIEWERS', error);
+								}
 								console.log('[Live Reload] Reloading page...');
 								window.location.reload();
 							}
