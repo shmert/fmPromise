@@ -25,8 +25,10 @@ export interface DataAPIRequest {
 	version?: 'v1' | 'v2' | 'vLatest'
 	/** The name of the layout to perform the action on. */
 	layouts: string;
-	/** An array of find request objects. */
-	query?: any[];
+	/** A table occurrence name. Required for table occurrence metaData actions. Works like the layouts key. If the table occurrence is specified, the metadata for that table is returned. If no name is specified, the list of table occurrences is returned.. */
+	tables?: string;
+	/** An array of find request objects, e.g. `{qty: ">1"}`. */
+	query?: Record<string, string>[];
 	/** The unique ID number of a record. You can't specify both a query and recordId key. */
 	recordId?: number | string;
 	/** The maximum number of records to return. */
@@ -51,8 +53,8 @@ export interface DataAPIResponse {
 
 /** A specialized array type that includes Data API metadata. */
 export type DataAPIRecordArray = DataAPIRecord[] & {
-	foundCount: number;
-	totalRecordCount: number;
+	foundCount?: number;
+	totalRecordCount?: number;
 };
 
 export interface DataAPIRecord extends Record<string, null | string | number | DataAPIRecord[]> {
