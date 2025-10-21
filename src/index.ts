@@ -12,55 +12,123 @@ export interface PerformScriptOptions {
 	ignoreResult?: boolean;
 }
 
-export interface SortPart {
-	fieldName: string,
-	sortOrder?: 'ascend' | 'descend'
+/** A FileMaker portal record, where values are strings or numbers. */
+export type PortalRecord = Record<string, string | number>;
+
+/** A processed Data API record object. */
+export interface DataAPIRecord {
+	/** The unique ID of the record. This property is non-enumerable. */
+	readonly recordId: string;
+	/** The modification ID of the record. This property is non-enumerable. */
+	readonly modId: string;
+	/** Field and portal data from the record. */
+	[key: string]: string | number | PortalRecord[];
 }
 
-/** Parameters for a FileMaker Data API request. */
-export interface DataAPIRequest {
-	/** Defaults to 'read'. */
-	action?: 'read' | 'metaData' | 'create' | 'update' | 'delete' | 'duplicate'
-	/** Defaults to 'v1'. */
-	version?: 'v1' | 'v2' | 'vLatest'
-	/** The name of the layout to perform the action on. */
-	layouts: string;
-	/** A table occurrence name. Required for table occurrence metaData actions. Works like the layouts key. If the table occurrence is specified, the metadata for that table is returned. If no name is specified, the list of table occurrences is returned.. */
-	tables?: string;
-	/** An array of find request objects, e.g. `{qty: ">1"}`. */
-	query?: Record<string, string>[];
-	/** The unique ID number of a record. You can't specify both a query and recordId key. */
-	recordId?: number | string;
-	/** The maximum number of records to return. */
-	limit?: number;
-	/** The number of records to skip before returning results. */
-	offset?: number;
-	/** An array of sort objects. */
-	sort?: SortPart[];
-	/** An array of portal names to include in the result. */
-	portal?: string[];
-	/** A JSON object that specifies record data to create or update. */
-	fieldData?: Record<string, any>;
-	/** The modification ID of a record for optimistic locking on updates. */
-	modId?: string | number;
-}
-
-/** The raw top-level response from a FileMaker Data API script step. */
-export interface DataAPIResponse {
-	messages: { code: string; message: string }[];
-	response: any;
-}
-
-/** A specialized array type that includes Data API metadata. */
-export type DataAPIRecordArray = DataAPIRecord[] & {
-	foundCount?: number;
-	totalRecordCount?: number;
+/** A specialized array type for record sets that includes Data API metadata. */
+export type DataAPIRecordArray = Array<DataAPIRecord> & {
+	foundCount: number;
+	totalRecordCount: number;
 };
 
-export interface DataAPIRecord extends Record<string, null | string | number | DataAPIRecord[]> {
-	modId: number | string
-	recordId: number | string
+/** A single find request criterion or an omit instruction. */
+export type QueryPart = Record<string, string | number> | { omit: "true" };
+
+// Base Request and Response Types
+export interface DataAPIRequestBase {
+	version?: 'v1' | 'v2' | 'vLatest';
+	layouts?: string;
+	tables?: string;
 }
+
+export interface DataAPIResponse<T = any> {
+	messages: { code: string; message: string }[];
+	response: T;
+}
+
+// Action-Specific Request Types
+export type DataAPIReadRequest = DataAPIRequestBase & {
+	action?: 'read';
+	layouts: string;
+	query?: QueryPart[];
+	recordId?: number | string;
+	limit?: number;
+	offset?: number;
+	sort?: SortPart[];
+	portal?: string[];
+};
+
+export type DataAPIMetaDataRequest = DataAPIRequestBase & {
+	action: 'metaData';
+};
+
+export type DataAPICreateRequest = DataAPIRequestBase & {
+	action: 'create';
+	layouts: string;
+	fieldData: Record<string, any>;
+};
+
+export type DataAPIUpdateRequest = DataAPIRequestBase & {
+	action: 'update';
+	layouts: string;
+	recordId: number | string;
+	modId?: string | number;
+	fieldData: Record<string, any>;
+};
+
+export type DataAPIDeleteRequest = DataAPIRequestBase & {
+	action: 'delete';
+	layouts: string;
+	recordId: number | string;
+	modId?: string | number;
+};
+
+export type DataAPIDuplicateRequest = DataAPIRequestBase & {
+	action: 'duplicate';
+	layouts: string;
+	recordId: number | string;
+};
+
+// Union of all possible request types for the implementation signature
+export type DataAPIRequest =
+	| DataAPIReadRequest
+	| DataAPIMetaDataRequest
+	| DataAPICreateRequest
+	| DataAPIUpdateRequest
+	| DataAPIDeleteRequest
+	| DataAPIDuplicateRequest;
+
+
+// Action-Specific Response Types
+export interface DataAPIReadResponse extends DataAPIResponse<{
+	dataInfo: {
+		database: string;
+		layout: string;
+		table: string;
+		totalRecordCount: number;
+		foundCount: number;
+		returnedCount: number;
+	};
+	data: {
+		fieldData: Record<string, string | number>;
+		portalData: Record<string, PortalRecord[]>;
+		recordId: string;
+		modId: string;
+	}[];
+}> {
+	/**
+	 * Processes the raw response data into a clean array of record objects.
+	 * @returns {DataAPIRecordArray} An array of records with metadata attached.
+	 */
+	toRecords(): DataAPIRecordArray;
+}
+
+export type DataAPICreateResponse = DataAPIResponse<{ recordId: string; modId: string; }>;
+export type DataAPIUpdateResponse = DataAPIResponse<{ modId: string; }>;
+export type DataAPIDeleteResponse = DataAPIResponse<{}>; // Empty response object
+export type DataAPIDuplicateResponse = DataAPIResponse<{ recordId: string; modId: string; }>;
+export type DataAPIMetaDataResponse = DataAPIResponse<any>; // Metadata structure is highly variable
+
 
 class FMPromiseError extends Error {
 	public code?: string | number;
@@ -166,23 +234,6 @@ const fmPromise = {
 		return this.performScript('fmPromise.evaluate', stmt, options);
 	},
 
-	/**
-	 * Executes a FileMaker Data API query.
-	 * This method returns the raw, unprocessed result from the "Execute FileMaker Data API" script step.
-	 * @param {DataAPIRequest} params - The Data API request parameters.
-	 * @returns {Promise<DataAPIResponse>} A promise that resolves with the full Data API result object.
-	 * @throws {FMPromiseError} If the Data API returns an error message.
-	 */
-	async executeFileMakerDataAPI(params: DataAPIRequest): Promise<DataAPIResponse> {
-		const result = await this.performScript<DataAPIResponse>('fmPromise.executeFileMakerDataAPI', params);
-		if (!result || !result.messages || !result.messages.length) {
-			throw new FMPromiseError({code: -1, message: 'Empty data API response'});
-		}
-		if (result.messages[0].code !== '0') {
-			throw new FMPromiseError(result.messages[0]);
-		}
-		return result;
-	},
 
 	/** @internal Processes a single portal row to clean up field names and hide metadata. */
 	_processPortalRow(portalRow: any, portalName: string): any {
@@ -206,52 +257,78 @@ const fmPromise = {
 		});
 		return cleanedRow;
 	},
-	/**
-	 * A convenience wrapper for `executeFileMakerDataAPI` that returns just the record data.
-	 * @param params The Data API request parameters.
-	 * @returns A promise resolving to an array of typed record objects, with metadata attached.
-	 */
-	async executeFileMakerDataAPIRecords(
-		params: DataAPIRequest
-	): Promise<DataAPIRecordArray> { // FIX: Simplified the return type generic.
-		const response = await this.executeFileMakerDataAPI(params);
+	// Overloaded signatures for type-safe Data API calls
+	async executeFileMakerDataAPI(params: DataAPIReadRequest): Promise<DataAPIReadResponse>;
+	async executeFileMakerDataAPI(params: DataAPICreateRequest): Promise<DataAPICreateResponse>;
+	async executeFileMakerDataAPI(params: DataAPIUpdateRequest): Promise<DataAPIUpdateResponse>;
+	async executeFileMakerDataAPI(params: DataAPIDeleteRequest): Promise<DataAPIDeleteResponse>;
+	async executeFileMakerDataAPI(params: DataAPIDuplicateRequest): Promise<DataAPIDuplicateResponse>;
+	async executeFileMakerDataAPI(params: DataAPIMetaDataRequest): Promise<DataAPIMetaDataResponse>;
 
-		// FIX: Handle non-record responses (e.g., from update/delete/create actions) gracefully.
-		if (!response.response.data) {
-			const emptyArr: any[] = [];
-			Object.defineProperties(emptyArr, {
-				foundCount: {value: 0, enumerable: false},
-				totalRecordCount: {value: 0, enumerable: false},
-			});
-			return emptyArr as DataAPIRecordArray;
+	/**
+	 * Executes a FileMaker Data API query with type safety based on the action.
+	 * @param {DataAPIRequest} params - The Data API request parameters.
+	 * @returns {Promise<any>} A promise that resolves with a response object specific to the request action.
+	 * @throws {FMPromiseError} If the Data API returns an error message.
+	 */
+	async executeFileMakerDataAPI(params: DataAPIRequest): Promise<DataAPIResponse> {
+		const result = await this.performScript<DataAPIResponse>('fmPromise.executeFileMakerDataAPI', params);
+		if (!result || !result.messages || !result.messages.length) {
+			throw new FMPromiseError({code: -1, message: 'Empty data API response'});
+		}
+		if (result.messages[0].code !== '0') {
+			throw new FMPromiseError(result.messages[0]);
 		}
 
-		const arr = response.response.data.map((o: any) => {
-			const portalData = o.portalData || {};
-			const cleanedPortalData: { [key: string]: any } = {};
+		// If it's a 'read' action, attach the toRecords() helper method to the response.
+		const action = params.action || 'read'; // 'read' is the default
+		if (action === 'read') {
+			const self = this;
+			(result as DataAPIReadResponse).toRecords = function (): DataAPIRecordArray {
+				const responseData = this.response.data || [];
 
-			// Process each portal to clean up its rows
-			for (const portalName in portalData) {
-				const portalRows = portalData[portalName];
-				cleanedPortalData[portalName] = portalRows.map((row: any) => this._processPortalRow(row, portalName));
-			}
+				const arr = responseData.map((o: any) => {
+					const portalData = o.portalData || {};
+					const cleanedPortalData: { [key: string]: any } = {};
 
-			const rec = {...o.fieldData, ...cleanedPortalData};
-			Object.defineProperties(rec, {
-				recordId: {value: o.recordId, enumerable: false, writable: true, configurable: true},
-				modId: {value: o.modId, enumerable: false, writable: true, configurable: true},
-			});
+					for (const portalName in portalData) {
+						const portalRows = portalData[portalName];
+						cleanedPortalData[portalName] = portalRows.map((row: any) => self._processPortalRow(row, portalName));
+					}
 
-			return rec;
-		});
+					const rec = {...o.fieldData, ...cleanedPortalData};
+					Object.defineProperties(rec, {
+						recordId: {value: o.recordId, enumerable: false, writable: true, configurable: true},
+						modId: {value: o.modId, enumerable: false, writable: true, configurable: true},
+					});
 
-		Object.defineProperties(arr, {
-			foundCount: {value: response.response.dataInfo.foundCount, enumerable: false},
-			totalRecordCount: {value: response.response.dataInfo.totalRecordCount, enumerable: false},
-		});
+					return rec;
+				});
 
-		return arr as DataAPIRecordArray;
+				const dataInfo = this.response.dataInfo || {foundCount: 0, totalRecordCount: 0};
+				Object.defineProperties(arr, {
+					foundCount: {value: dataInfo.foundCount, enumerable: false},
+					totalRecordCount: {value: dataInfo.totalRecordCount, enumerable: false},
+				});
+				return arr as DataAPIRecordArray;
+			};
+		}
+
+		return result;
 	},
+
+	/**
+	 * @deprecated Use `fmPromise.executeFileMakerDataAPI({ action: 'read', ... })` and the `.toRecords()` method on the response instead.
+	 */
+	async executeFileMakerDataAPIRecords(params: DataAPIReadRequest): Promise<DataAPIRecordArray> {
+		console.warn('fmPromise.executeFileMakerDataAPIRecords is deprecated. Use fmPromise.executeFileMakerDataAPI({ action: \'read\', ... }) and the .toRecords() method on the response instead.');
+		if (params.action && params.action !== 'read') {
+			throw new FMPromiseError({message: 'executeFileMakerDataAPIRecords only supports the \'read\' action.'});
+		}
+		const response = await this.executeFileMakerDataAPI(params);
+		return response.toRecords();
+	},
+
 
 	/**
 	 * Executes a SQL query using FileMaker's `ExecuteSQL` function.

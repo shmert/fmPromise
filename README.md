@@ -38,9 +38,9 @@ In addition, fmPromise offers more convenient data structures for returned value
 
 Install the fmPromise Add-On, restart FileMaker, and add this to your FileMaker solution's add-ons. 
 
-You can [download the fmPromise Add-On here](https://com-prosc-internal.s3.amazonaws.com/fmPromise.fmaddon.zip):
+You can [download the fmPromise Add-On here](https://store.360works.com/add-product/FMPROMISE):
 
-https://com-prosc-internal.s3.amazonaws.com/fmPromise.fmaddon.zip
+https://store.360works.com/add-product/FMPROMISE
 
 Drag an fmPromise module to your FileMaker layout, enter Browser mode, and follow the instructions there.
 
