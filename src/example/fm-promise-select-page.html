@@ -130,25 +130,21 @@
 	<!-- View 2: Shown if dev server is offline -->
 	<div id="setup-instructions" class="content-box">
 		<h4>Welcome to fmPromise!</h4>
-		<p>To create new web viewer modules, you need to run the local development server.</p>
-		<p>Please follow these steps in a terminal in your project's root directory:</p>
+		<p>To create new web viewer modules, you need to run the local development server in a directory of your choice. fmPromise will create editable source code for your web viewer modules in this directory.</p>
+		<p>Please follow these steps in a terminal in the directory you would like to use for web viewer content (this can be any directory on your machine):</p>
 		<ol>
 			<li>
-				<strong>Install the package:</strong>
+				<strong>Install the package (you may need to <a href="https://docs.npmjs.com/downloading-and-installing-node-js-and-npm" target="_blank">Install NPM</a> first)</strong>
 				<code>npm install @360works/fmpromise</code>
 			</li>
 			<li>
-				<strong>Add the dev script (recommended):</strong><br>
-				For convenience, add the following to the <code>"scripts"</code> section of your project's <code>package.json</code> file:
-				<pre><code>"scripts": {"dev": "fmpromise-dev"}</code></pre>
-			</li>
-			<li>
 				<strong>Start the development server:</strong>
-				<code>npm run dev</code>
+				<code>npx fmpromise-dev</code>
 			</li>
-			<li>Once the server is running, <strong>Reload this Web Viewer</strong>.</li>
+			<li>Once the server is running, <strong>Reload this Web Viewer</strong> and call the <strong>fmPromise.toggleDevMode</strong> script to enable devMode.</li>
 		</ol>
-		<p>Alternatively, you can run the server directly at any time with <code>npx fmpromise-dev</code>.</p>
+
+		<p>Consult the <a href="https://github.com/shmert/fmPromise" target="_blank">fmPromise documentation</a> for details.</p>
 
 		<div id="server-address-warning">
 			<strong>Warning:</strong> The FileMaker global variable <code>$$fmPromise_Server_Address</code> is not set or is invalid. Please ensure the "fmPromise.OnFirstWindowOpen" script has run correctly.

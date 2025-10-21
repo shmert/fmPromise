@@ -1,4 +1,4 @@
-## fmPromise: a Richer JavaScript Web Viewer Integration
+# fmPromise: a Richer JavaScript Web Viewer Integration
 
 FileMaker 19 has added the ability to call FileMaker scripts from your JavaScript, as well as executing a JavaScript function from a FileMaker script.
 This allows for integration between FileMaker and JavaScript/WebViewer, but has some clunky bits that we can make better.
@@ -34,34 +34,17 @@ In addition, fmPromise offers more convenient data structures for returned value
 
 `fmPromise.executeFileMakerDataAPIRecords`  returns an array of objects, with portal data as attributes.
 
-### Debugging
+# Using fmPromise
 
-I would *strongly* recommend you enable external JavaScript debugging in your web viewer, as described [here](https://community.claris.com/en/s/question/0D50H00007uvYTVSA2/enable-inspect-element-with-right-click-in-webviewer-).
+Install the fmPromise Add-On, restart FileMaker, and add this to your FileMaker solution's add-ons. 
 
-From your terminal, type:
+You can [download the fmPromise Add-On here](https://com-prosc-internal.s3.amazonaws.com/fmPromise.fmaddon.zip):
 
-```bash
-defaults write com.FileMaker.client.pro12 WebKitDebugDeveloperExtrasEnabled -bool YES
-```
+https://com-prosc-internal.s3.amazonaws.com/fmPromise.fmaddon.zip
 
-This allows you to utilize Safari's developer tools on your web viewer code, which is incredibly useful.
+Drag an fmPromise module to your FileMaker layout, enter Browser mode, and follow the instructions there.
 
-### Using fmPromise
-
-1. copy the `fmPromise` script from **fmPromiseScript.fmp12** to your file.
-2. Add a web viewer to your layout.
-    1. Give it the name `fmPromiseWebViewer`.
-    2. Check "Allow JavaScript to perform FileMaker scripts".
-    3. Uncheck "Automatically encode URL"
-    4. Point the Web Address to your HTML file, either hosted, local, or a data URL reading from a field
-
-### Packaging
-
-Work in progress: start the fmPromise build server. Write your HTML using your IDE of preference. Use the fmPromiseBuild script to get the minified, single-file html payload and store that in your database in a text field.
-
-Point your web viewer to this text field using a data URL, e.g. `"data:text/html," & WebView::schedule_board`
-
-### API
+# API
 
 `fmPromise.performScript(scriptName, parameter)` Performs a FileMaker script, returning a Promise. The Promise will be resolved with the script result (parsed as JSON if possible), or rejected if the FileMaker script result starts with the
 word "ERROR".
@@ -79,86 +62,15 @@ word "ERROR".
 * Each FileMaker script call has an id, so you can fire off multiple script calls to FileMaker and they will resolve correctly. Generally one-at-a-time execution, given FileMaker's single-threaded nature.
 * You can make script calls as soon as your `<script type="module">` tag finishes loading, since `fmPromise` takes care of polling for the `window.FileMaker` object.
 
-### Caveats
 
-* The callback script defaults to looking for a webViewer named `fmPromiseWebViewer`. You can override the web viewer name in the JavaScript.
-* When you use Perform Javascript in Web Viewer, you will not get a result if the performed method is `async`.
+# Debugging
 
-## Getting Started
+I would *strongly* recommend you enable external JavaScript debugging in your web viewer, as described [here](https://community.claris.com/en/s/question/0D50H00007uvYTVSA2/enable-inspect-element-with-right-click-in-webviewer-).
 
-Create a static HTML file and a JavaScript file (`fm-promise.ts`) in the same directory. All your application logic will go inside a single `<script type="module">` block, which allows you to use the modern `import` syntax.
+From your terminal, type:
 
-Example:
-
-```html
-<!doctype html>
-<script type="module">
-	import fmPromise from 'fmPromise-github/src/fm-promise.ts'; // or https://cdn.jsdelivr.net/gh/shmert/fmPromise/fm-promise.min.js
-
-	async function hello() {
-		const name = await fmPromise.evaluate('Get(Username)');
-		document.body.innerText = 'Hello, ' + name;
-	}
-
-	hello();
-</script>
+```bash
+defaults write com.FileMaker.client.pro12 WebKitDebugDeveloperExtrasEnabled -bool YES
 ```
 
-Now we want to display this in a Web Viewer in FileMaker.
-
-Add a Web Viewer component to your FileMaker layout. For now, the Web Address can be a file pointing to your HTML file, e.g. `"file:///Users/myUserName/MyProject/hello-fmpromise.html"`.
-
-**IMPORTANT:** check the box labeled "Allow JavaScript to perform FileMaker Scripts". Without this step, nothing will happen.
-
-**IMPORTANT:** in the "Position" inspector, give your web viewer the Name `fmPromiseWebViewer`.
-
-Now you should be able to go to browse mode and see the hello message displayed.
-
-The following example loads Vue.js 3 from the internet, fetches all tables and fields from your FileMaker solution, and displays them as nested lists. Note how both `fmPromise` and `vue` are imported inside the module script.
-
-```html
-<!doctype html>
-<html lang="en">
-<head>
-	<meta charset="utf-8">
-</head>
-<body>
-<div id="app">
-	<ol>
-		<li v-for="table in tables">
-			{{ table.name }}
-			<ul>
-				<li v-for="field in table.fields">
-					{{ field.name }}
-				</li>
-			</ul>
-		</li>
-	</ol>
-</div>
-
-<script type="module">
-	import fmPromise from 'fmPromise-github/src/fm-promise.ts';
-	import {createApp} from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
-
-	createApp({
-		data() {
-			return {
-				tables: {}
-			}
-		},
-		async mounted() {
-			const rows = await fmPromise.executeSql('select tableName, fieldName from filemaker_fields');
-
-			this.tables = rows.reduce((result, eachRow) => {
-				let tableName = eachRow[0];
-				let fieldName = eachRow[1];
-				const tbl = result[tableName] || (result[tableName] = {name: tableName, fields: []});
-				tbl.fields.push({name: fieldName});
-				return result;
-			}, {});
-		}
-	}).mount('#app');
-</script>
-</body>
-</html>
-```
+This allows you to utilize Safari's developer tools on your web viewer code, which is incredibly useful.

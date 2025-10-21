@@ -126,7 +126,7 @@ const server = http.createServer(async (request, response) => {
 				modulePath = path.join(modulePath, 'index.html');
 			}
 			const result = await scaffoldModule(modulePath);
-			const message = `Scaffolding complete. Created ${result.created.length}, skipped ${result.skipped.length}.`;
+			const message = `Scaffolding complete. Created ${result.created.length} file(s).`;
 			response.writeHead(201, {'Content-Type': 'application/json'});
 			response.end(JSON.stringify({success: true, message, details: result}));
 

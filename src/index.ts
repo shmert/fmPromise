@@ -1,12 +1,5 @@
 // --- Type Definitions ---
 
-// By defining an empty LayoutMap, the code works even if no schema is generated.
-// The user's generated `filemaker-types.d.ts` will merge with and extend this.
-declare namespace FMSchema {
-	interface LayoutMap {
-	}
-}
-
 export type FMPromiseScriptRunningOption = 0 | 1 | 2 | 3 | 4 | 5;
 
 /** Options for the `performScript` call, mirroring FileMaker's `Perform Script with Option`. */
@@ -15,8 +8,13 @@ export interface PerformScriptOptions {
 	alwaysReturnString?: boolean;
 	/** Specifies how to handle a currently running FileMaker script. 0: Continue (default); 1: Halt; 2: Exit; 3: Resume; 4: Pause; 5: Interrupt. */
 	runningScript?: FMPromiseScriptRunningOption,
-	/** If performScript will cause the WebViewer to go away, pass `true` here to avoid errors about "Unabel to locate web viewer named…" */
+	/** If performScript will cause the WebViewer to go away, pass `true` here to avoid errors about "Unable to locate web viewer named…" */
 	ignoreResult?: boolean;
+}
+
+export interface SortPart {
+	fieldName: string,
+	sortOrder?: 'ascend' | 'descend'
 }
 
 /** Parameters for a FileMaker Data API request. */
@@ -26,21 +24,23 @@ export interface DataAPIRequest {
 	/** Defaults to 'v1'. */
 	version?: 'v1' | 'v2' | 'vLatest'
 	/** The name of the layout to perform the action on. */
-	layouts: keyof FMSchema.LayoutMap | (string & {}); // Allow any string but autocomplete known layouts
-	/** To retrieve the data in the context of a different layout. */
-	'layout.response': keyof FMSchema.LayoutMap | (string & {}); // Allow any string but autocomplete known layouts
+	layouts: string;
 	/** An array of find request objects. */
 	query?: any[];
 	/** The unique ID number of a record. You can't specify both a query and recordId key. */
-	recordId?: number;
+	recordId?: number | string;
 	/** The maximum number of records to return. */
 	limit?: number;
 	/** The number of records to skip before returning results. */
 	offset?: number;
 	/** An array of sort objects. */
-	sort?: any[];
+	sort?: SortPart[];
 	/** An array of portal names to include in the result. */
 	portal?: string[];
+	/** A JSON object that specifies record data to create or update. */
+	fieldData?: Record<string, any>;
+	/** The modification ID of a record for optimistic locking on updates. */
+	modId?: string | number;
 }
 
 /** The raw top-level response from a FileMaker Data API script step. */
@@ -50,10 +50,15 @@ export interface DataAPIResponse {
 }
 
 /** A specialized array type that includes Data API metadata. */
-export type DataAPIRecordArray<T> = T[] & {
+export type DataAPIRecordArray = DataAPIRecord[] & {
 	foundCount: number;
 	totalRecordCount: number;
 };
+
+export interface DataAPIRecord extends Record<string, null | string | number | DataAPIRecord[]> {
+	modId: number | string
+	recordId: number | string
+}
 
 class FMPromiseError extends Error {
 	public code?: string | number;
@@ -120,7 +125,9 @@ const fmPromise = {
 
 		let result = await new Promise((resolve, reject) => {
 			callbacksById[promiseId] = {resolve, reject};
-			const meta = JSON.stringify({scriptName, promiseId, webViewerName: this.webViewerName, ignoreResult: options?.ignoreResult || undefined});
+			const meta = JSON.stringify({
+				scriptName, promiseId, webViewerName: this.webViewerName, ignoreResult: options?.ignoreResult || undefined
+			});
 			const comboParam = meta + '\n' + (scriptParameter || '');
 			const option = options.runningScript || 0;
 
@@ -192,22 +199,30 @@ const fmPromise = {
 		}
 
 		Object.defineProperties(cleanedRow, {
-			recordId: {value: portalRow.recordId, enumerable: false},
-			modId: {value: portalRow.modId, enumerable: false},
+			recordId: {value: portalRow.recordId, enumerable: false, writable: true, configurable: true},
+			modId: {value: portalRow.modId, enumerable: false, writable: true, configurable: true},
 		});
 		return cleanedRow;
 	},
 	/**
-	 * A convenience wrapper for `executeFileMakerDataAPI` that returns just the record data,
-	 * with full TypeScript type safety based on the provided layout name.
-	 * @template L The name of the layout, which must be a key in the generated `FMSchema.LayoutMap`.
-	 * @param params The Data API request parameters. The `layouts` property is strongly typed.
-	 * @returns A promise resolving to an array of typed record objects.
+	 * A convenience wrapper for `executeFileMakerDataAPI` that returns just the record data.
+	 * @param params The Data API request parameters.
+	 * @returns A promise resolving to an array of typed record objects, with metadata attached.
 	 */
-	async executeFileMakerDataAPIRecords<L extends keyof FMSchema.LayoutMap>(
-		params: { layouts: L } & Omit<DataAPIRequest, 'layouts'>
-	): Promise<DataAPIRecordArray<FMSchema.LayoutMap[L]>> {
+	async executeFileMakerDataAPIRecords(
+		params: DataAPIRequest
+	): Promise<DataAPIRecordArray> { // FIX: Simplified the return type generic.
 		const response = await this.executeFileMakerDataAPI(params);
+
+		// FIX: Handle non-record responses (e.g., from update/delete/create actions) gracefully.
+		if (!response.response.data) {
+			const emptyArr: any[] = [];
+			Object.defineProperties(emptyArr, {
+				foundCount: {value: 0, enumerable: false},
+				totalRecordCount: {value: 0, enumerable: false},
+			});
+			return emptyArr as DataAPIRecordArray;
+		}
 
 		const arr = response.response.data.map((o: any) => {
 			const portalData = o.portalData || {};
@@ -221,8 +236,8 @@ const fmPromise = {
 
 			const rec = {...o.fieldData, ...cleanedPortalData};
 			Object.defineProperties(rec, {
-				recordId: {value: o.recordId, enumerable: false},
-				modId: {value: o.modId, enumerable: false},
+				recordId: {value: o.recordId, enumerable: false, writable: true, configurable: true},
+				modId: {value: o.modId, enumerable: false, writable: true, configurable: true},
 			});
 
 			return rec;
@@ -232,7 +247,8 @@ const fmPromise = {
 			foundCount: {value: response.response.dataInfo.foundCount, enumerable: false},
 			totalRecordCount: {value: response.response.dataInfo.totalRecordCount, enumerable: false},
 		});
-		return arr as DataAPIRecordArray<FMSchema.LayoutMap[L]>;
+
+		return arr as DataAPIRecordArray;
 	},
 
 	/**
@@ -240,9 +256,9 @@ const fmPromise = {
 	 * Can be called as a standard function or as a tagged template literal.
 	 * @param {TemplateStringsArray | string} sqlOrStrings - The SQL query string or template literal strings.
 	 * @param {...any} bindings - Values to bind to the `?` placeholders.
-	 * @returns {Promise<any[][]>} A promise resolving to an array of rows.
+	 * @returns {Promise<string[][]>} A promise resolving to an array of rows, where each row is an array of strings.
 	 */
-	async executeSql(sqlOrStrings: TemplateStringsArray | string, ...bindings: any[]): Promise<any[][]> {
+	async executeSql(sqlOrStrings: TemplateStringsArray | string, ...bindings: any[]): Promise<string[][]> { // FIX: Changed return type to string[][]
 		let sql: string;
 		let finalBindings: any[];
 
