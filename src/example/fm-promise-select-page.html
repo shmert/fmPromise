@@ -129,6 +129,8 @@
 
 	<!-- View 2: Shown if dev server is offline -->
 	<div id="setup-instructions" class="content-box">
+		<div id="error">Could not connect to the local development server.</div>
+
 		<h4>Welcome to fmPromise!</h4>
 		<p>To create new web viewer modules, you need to run the local development server in a directory of your choice. fmPromise will create editable source code for your web viewer modules in this directory.</p>
 		<p>Please follow these steps in a terminal in the directory you would like to use for web viewer content (this can be any directory on your machine):</p>
@@ -149,7 +151,6 @@
 		<div id="server-address-warning">
 			<strong>Warning:</strong> The FileMaker global variable <code>$$fmPromise_Server_Address</code> is not set or is invalid. Please ensure the "fmPromise.OnFirstWindowOpen" script has run correctly.
 		</div>
-		<div id="error">Could not connect to the local development server.</div>
 	</div>
 	<!-- View 3: Shown on success -->
 	<div id="main-content" class="content-box">
