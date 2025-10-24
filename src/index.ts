@@ -73,6 +73,7 @@ export class FMPromiseService {
 	get webViewerName() {
 		return window.FMPROMISE_WEB_VIEWER_NAME || new URLSearchParams(window.location.search).get('webViewerName') || 'fmPromiseWebViewer';
 	}
+
 	/**
 	 * Performs a FileMaker script and returns a Promise.
 	 * @template T The expected type of the script result.
@@ -132,27 +133,6 @@ export class FMPromiseService {
 		return this.performScript('fmPromise.evaluate', stmt, options);
 	}
 
-
-	/** @internal Processes a single portal row to clean up field names and hide metadata. */
-	private _processPortalRow(portalRow: any, portalName: string): any { // FIX! unused?
-		const cleanedRow: { [key: string]: any } = {};
-		const prefix = `${portalName}::`;
-
-		for (const key in portalRow) {
-			if (key === 'recordId' || key === 'modId') continue;
-
-			if (key.startsWith(prefix)) {
-				const newKey = key.substring(prefix.length);
-				cleanedRow[newKey] = portalRow[key];
-			} else {
-				cleanedRow[key] = portalRow[key];
-			}
-		}
-		cleanedRow.recordId = portalRow.recordId;
-		cleanedRow.modId = portalRow.modId;
-		return cleanedRow;
-	}
-
 	/** Fetches records and returns the full Data API response object, which includes a `.toRecords()` helper. */
 	async executeFileMakerDataAPI<T = Record<string, any>>(params: DataAPIReadRequest): Promise<DataAPIReadResponse<T>>;
 	/** Creates a new record. */
@@ -178,21 +158,29 @@ export class FMPromiseService {
 			throw new FMPromiseError(result.messages[0]);
 		}
 
-		// TYPE GUARD: If it's a 'read' action, we specifically enhance the response.
-		// TypeScript understands that inside this block, `result` is a DataAPIReadResponse.
 		if ((params.action === 'read' || !params.action)) {
 			const readResponse = result as DataAPIReadResponse<T>;
+			const self = this;
 
 			readResponse.toRecords = function (): DataAPIRecordArray<T> {
 				const responseData = this.response.data || [];
 
-				const arr = responseData.map((o) => {
-					return {...o.fieldData, recordId: o.recordId, modId: o.modId};
+				const arr = responseData.map((record) => {
+					const cleanedPortalData: { [key: string]: any[] } = {};
+					for (const portalKey in record.portalData) {
+						cleanedPortalData[portalKey] = record.portalData[portalKey];
+					}
+
+					return {
+						...record.fieldData,
+						...cleanedPortalData,
+						recordId: record.recordId,
+						modId: record.modId,
+					};
 				});
 
-				const dataInfo = this.response.dataInfo || { foundCount: 0, totalRecordCount: 0 };
+				const dataInfo = this.response.dataInfo || { totalRecordCount: 0 };
 				Object.defineProperties(arr, {
-					foundCount: { value: dataInfo.foundCount, enumerable: false },
 					totalRecordCount: { value: dataInfo.totalRecordCount, enumerable: false },
 				});
 				return arr as DataAPIRecordArray<T>;

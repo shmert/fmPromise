@@ -39,7 +39,6 @@ export type DataAPIRecord<T> = T & {
  * It's a standard array of records but with added readonly properties for counts.
  */
 export interface DataAPIRecordArray<T> extends Array<DataAPIRecord<T>> {
-	readonly foundCount: number;
 	readonly totalRecordCount: number;
 }
 
@@ -47,6 +46,30 @@ export interface DataAPIRecordArray<T> extends Array<DataAPIRecord<T>> {
 // =================================================================
 // ACTION: "read" (Find Records)
 // =================================================================
+
+export type PortalRowData = Record<string, string | number> & {
+	recordId: string;
+	modId: string;
+};
+
+/** Describes the metadata for a single portal from the `portalDataInfo` array. */
+export interface PortalDataInfo {
+	portalObjectName?: string; // This is the key! Only present if the portal has an object name.
+	database: string;
+	table: string;
+	foundCount: number;
+	returnedCount: number;
+}
+
+/** Describes the raw structure of a single record returned in the `data` array. */
+interface RawDataAPIRecord<T> {
+	fieldData: T;
+	portalData: Record<string, PortalRowData[]>;
+	recordId: string;
+	modId: string;
+	portalDataInfo?: PortalDataInfo[];
+}
+
 type SortObject = {
 	fieldName: string;
 	sortOrder: 'ascend' | 'descend';
@@ -80,16 +103,12 @@ export interface DataAPIReadResponse<T> extends BaseDataAPIResponse {
 			foundCount: number;
 			returnedCount: number;
 		};
-		data?: Array<{
-			fieldData: T;
-			portalData: Record<string, any[]>;
-			recordId: string;
-			modId: string;
-		}>;
+		// Use our new, more specific type for the data array
+		data?: Array<RawDataAPIRecord<T>>;
 	};
 	/**
 	 * A helper function to transform the raw response data into a clean,
-	 * strongly-typed array of records.
+	 * strongly-typed array of records, including parsed portal data.
 	 * @returns {DataAPIRecordArray<T>} An array of record objects, enhanced with metadata.
 	 */
 	toRecords: () => DataAPIRecordArray<T>;
@@ -119,6 +138,23 @@ export interface DataAPIUpdateRequest extends BaseDataAPIRequest {
 	recordId: number | string;
 	modId?: number | string;
 	fieldData: Record<string, any>;
+	/**
+	 * Data for updating related records in one or more portals.
+	 * The key is the portal's object name. The value is an array of portal row objects.
+	 * Each portal row object MUST include its own `recordId` to identify which related record to update.
+	 * Data to update should use the fully qualified `Table::Field` syntax.
+	 * e.g.
+	 * ```
+	 * 	data = await fmPromise.executeFileMakerDataAPI({
+	 * 		action: 'update',
+	 * 		fieldData: {firstName:'Bob'},
+	 * 		layouts: 'User',
+	 * 		recordId: 1,
+	 * 		portalData: {portalOne: [{'recordId': 1, 'User_Phone::phoneNumber': '4155551234', 'User_Phone_Label::color':'Taupe'}]}
+	 * 	}) // {response: {modId: "7"}, messages: [{code: "0", message: "OK"}]} = $8
+	 * ```
+	 */
+	portalData?: Record<string, Array<{ recordId: number | string; [key: string]: any; }>>;
 }
 
 export interface DataAPIUpdateResponse extends BaseDataAPIResponse {
