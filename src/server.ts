@@ -116,21 +116,25 @@ const server = http.createServer(async (request, response) => {
 			};
 
 			const html = generateInfoHtml(info);
-			response.writeHead(200, { 'Content-Type': 'text/html' });
+			response.writeHead(200, {'Content-Type': 'text/html'});
 			response.end(html);
 			// --- INIT ROUTE ---
 		} else if (pathname.startsWith('/init/')) {
 			if (method !== 'POST') throw new Error(`Method ${method} not allowed for /init.`);
-			let modulePath = pathname.replace('/init/', '');
-			if (!modulePath.toLowerCase().endsWith('.html')) {
-				modulePath = path.join(modulePath, 'index.html');
+
+			// Capture the original path the user entered
+			const originalModulePath = pathname.replace('/init/', '');
+
+			// Calculate the final path, appending /index.html if it's a directory
+			let finalModulePath = originalModulePath;
+			if (!finalModulePath.toLowerCase().endsWith('.html')) {
+				finalModulePath = path.join(finalModulePath, 'index.html');
 			}
-			const result = await scaffoldModule(modulePath);
+
+			const result = await scaffoldModule(finalModulePath, originalModulePath);
 			const message = `Scaffolding complete. Created ${result.created.length} file(s).`;
 			response.writeHead(201, {'Content-Type': 'application/json'});
 			response.end(JSON.stringify({success: true, message, details: result}));
-
-			// --- BUILD ROUTE ---
 		} else if (pathname.startsWith('/build/')) {
 			if (method !== 'GET') throw new Error(`Method ${method} not allowed for /build.`);
 			let modulePath = pathname.replace('/build/', '');

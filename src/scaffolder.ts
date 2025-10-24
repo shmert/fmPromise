@@ -29,14 +29,14 @@ const tsconfigTemplate = `{
 }
 `;
 
-export const scaffoldModule = async (htmlFilePath: string): Promise<ScaffoldResult> => {
+
+export const scaffoldModule = async (htmlFilePath: string, originalPath: string): Promise<ScaffoldResult> => {
 	const projectRoot = process.cwd();
-	const result: ScaffoldResult = {created: [], skipped: []};
+	const result: ScaffoldResult = { created: [], skipped: [] };
 
 	const targetDir = path.resolve(projectRoot, 'src', path.dirname(htmlFilePath));
-	await fs.mkdir(targetDir, {recursive: true});
+	await fs.mkdir(targetDir, { recursive: true });
 
-	// --- Create tsconfig.json if it doesn't exist ---
 	const tsconfigPath = path.join(projectRoot, 'tsconfig.json');
 	if (!(await fileExists(tsconfigPath))) {
 		await fs.writeFile(tsconfigPath, tsconfigTemplate, 'utf8');
@@ -44,30 +44,46 @@ export const scaffoldModule = async (htmlFilePath: string): Promise<ScaffoldResu
 	} else {
 		result.skipped.push('tsconfig.json');
 	}
-	// --------------------------------------------------
 
 	const htmlFileName = path.basename(htmlFilePath);
 
-	let htmlExists = await fileExists(htmlFileName) // don't create any files if the html file already exists
-    if (!htmlExists) {
-        const templatesDir = path.join(__dirname, 'templates');
-    	const filesToCreate = [
-    		{templateName: 'module.html', finalName: htmlFileName},
-    		{templateName: 'main.ts', finalName: 'main.ts'},
-    		{templateName: 'style.css', finalName: 'style.css'},
-    	];
-        for (const file of filesToCreate) {
-            const finalPath = path.join(targetDir, file.finalName);
+	// Get the module name from the ORIGINAL path, not the final file path
+    const moduleName = path.basename(originalPath);
 
-            if (await fileExists(finalPath)) {
-                result.skipped.push(file.finalName);
-            } else {
-                const templatePath = path.join(templatesDir, file.templateName);
-                await fs.copyFile(templatePath, finalPath);
-                result.created.push(file.finalName);
-            }
-        }
-    }
+	// Calculate the full, absolute path for display
+	const absoluteModulePath = path.resolve(projectRoot, 'src', htmlFilePath);
+
+	const templatesDir = path.join(__dirname, 'templates');
+	const filesToCreate = [
+		{ templateName: 'module.html', finalName: htmlFileName },
+		{ templateName: 'main.ts', finalName: 'main.ts' },
+		{ templateName: 'style.css', finalName: 'style.css' },
+	];
+
+	for (const file of filesToCreate) {
+		const finalPath = path.join(targetDir, file.finalName);
+		const templatePath = path.join(templatesDir, file.templateName);
+
+		if (await fileExists(finalPath)) {
+			result.skipped.push(file.finalName);
+			continue;
+		}
+
+		if (file.templateName === 'module.html') {
+			const templateContent = await fs.readFile(templatePath, 'utf8');
+
+			// Use the correct variables for replacement
+			const newContent = templateContent
+				.replace(/{{MODULE_NAME}}/g, moduleName)
+				.replace(/{{MODULE_PATH}}/g, absoluteModulePath);
+
+			await fs.writeFile(finalPath, newContent, 'utf8');
+			result.created.push(file.finalName);
+		} else {
+			await fs.copyFile(templatePath, finalPath);
+			result.created.push(file.finalName);
+		}
+	}
 
 	return result;
 };
