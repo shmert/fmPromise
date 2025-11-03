@@ -1,44 +1,31 @@
 // types.ts
 
+/**
+ * Note: The interfaces in this file are intentionally written in a verbose, flat manner
+ * without using `extends` or complex intersections. This significantly improves the
+ * autocompletion and type-hinting performance in modern IDEs like IntelliJ and VS Code.
+ */
+
 // =================================================================
-// BASE TYPES
+// BASE TYPES (Referenced by the flat interfaces below)
 // =================================================================
 
-/** A generic Data API message object. */
 interface DataAPIMessage {
 	code: string;
 	message: string;
 }
 
-/** The base structure for all Data API responses. */
-interface BaseDataAPIResponse {
-	messages: DataAPIMessage[];
-}
-
-/** The base structure for most Data API requests. */
-interface BaseDataAPIRequest {
-	layouts: string;
-	version?: 'v1' | 'v2' | 'vLatest';
-}
-
 // =================================================================
-// RECORD & HELPERS
+// RECORD & HELPERS (Unchanged)
 // =================================================================
 
-/**
- * Represents a single FileMaker record object after processing.
- * It combines your data type `T` with readonly `recordId` and `modId`.
- */
 export type DataAPIRecord<T> = T & {
-	readonly recordId: string;
-	readonly modId: string;
+	recordId: string;
+	modId: string;
 };
 
-/**
- * Represents the special array returned by `toRecords()`.
- * It's a standard array of records but with added readonly properties for counts.
- */
 export interface DataAPIRecordArray<T> extends Array<DataAPIRecord<T>> {
+	readonly foundCount: number;
 	readonly totalRecordCount: number;
 }
 
@@ -47,21 +34,27 @@ export interface DataAPIRecordArray<T> extends Array<DataAPIRecord<T>> {
 // ACTION: "read" (Find Records)
 // =================================================================
 
+type SortObject = {
+	fieldName: string;
+	sortOrder: 'ascend' | 'descend';
+};
+
+/** The raw structure of a single portal record from the Data API. */
 export type PortalRowData = Record<string, string | number> & {
 	recordId: string;
 	modId: string;
 };
 
-/** Describes the metadata for a single portal from the `portalDataInfo` array. */
+/** Metadata for a single portal from the `portalDataInfo` array. */
 export interface PortalDataInfo {
-	portalObjectName?: string; // This is the key! Only present if the portal has an object name.
+	portalObjectName?: string;
 	database: string;
 	table: string;
 	foundCount: number;
 	returnedCount: number;
 }
 
-/** Describes the raw structure of a single record returned in the `data` array. */
+/** The raw structure of a single record from the Data API `data` array. */
 interface RawDataAPIRecord<T> {
 	fieldData: T;
 	portalData: Record<string, PortalRowData[]>;
@@ -70,30 +63,35 @@ interface RawDataAPIRecord<T> {
 	portalDataInfo?: PortalDataInfo[];
 }
 
-type SortObject = {
-	fieldName: string;
-	sortOrder: 'ascend' | 'descend';
-};
-
-interface DataAPIReadRequestBase extends BaseDataAPIRequest {
+/** A find request performed using a query object. */
+export interface DataAPIReadByQueryRequest {
 	action: 'read';
+	layouts: string;
+	query: any[];
 	limit?: number;
 	offset?: number;
 	sort?: SortObject[];
-	/**
-	 * the object ids of portals to fetch. Default is to fetch all.<br>
-	 * <strong>Note:</strong> if a portal has an objectId, the `toRecords()` function will use that as the key for the portal data.
-	 */
 	portal?: string[];
+	version?: 'v1' | 'v2' | 'vLatest';
 }
 
-// You can either query or specify a single recordId
-type DataAPIReadRequestQuery = { query: any[] };
-type DataAPIReadRequestRecordId = { recordId: number | string };
+/** A find request performed using a specific record ID. */
+export interface DataAPIReadByRecordIdRequest {
+	action: 'read';
+	layouts: string;
+	recordId: number | string;
+	limit?: number;
+	offset?: number;
+	sort?: SortObject[];
+	portal?: string[];
+	version?: 'v1' | 'v2' | 'vLatest';
+}
 
-export type DataAPIReadRequest = DataAPIReadRequestBase & (DataAPIReadRequestQuery | DataAPIReadRequestRecordId);
+// This simple union of two flat interfaces is much easier for IDEs to parse.
+export type DataAPIReadRequest = DataAPIReadByQueryRequest | DataAPIReadByRecordIdRequest;
 
-export interface DataAPIReadResponse<T> extends BaseDataAPIResponse {
+export interface DataAPIReadResponse<T> {
+	messages: DataAPIMessage[];
 	response: {
 		dataInfo?: {
 			database: string;
@@ -103,14 +101,8 @@ export interface DataAPIReadResponse<T> extends BaseDataAPIResponse {
 			foundCount: number;
 			returnedCount: number;
 		};
-		// Use our new, more specific type for the data array
 		data?: Array<RawDataAPIRecord<T>>;
 	};
-	/**
-	 * A helper function to transform the raw response data into a clean,
-	 * strongly-typed array of records, including parsed portal data.
-	 * @returns {DataAPIRecordArray<T>} An array of record objects, enhanced with metadata.
-	 */
 	toRecords: () => DataAPIRecordArray<T>;
 }
 
@@ -118,46 +110,37 @@ export interface DataAPIReadResponse<T> extends BaseDataAPIResponse {
 // =================================================================
 // ACTION: "create"
 // =================================================================
-export interface DataAPICreateRequest extends BaseDataAPIRequest {
+export interface DataAPICreateRequest {
 	action: 'create';
+	layouts: string;
 	fieldData: Record<string, any>;
+	version?: 'v1' | 'v2' | 'vLatest';
 }
 
-export interface DataAPICreateResponse extends BaseDataAPIResponse {
+export interface DataAPICreateResponse {
+	messages: DataAPIMessage[];
 	response: {
 		recordId: string;
 		modId: string;
 	};
 }
 
+
 // =================================================================
 // ACTION: "update"
 // =================================================================
-export interface DataAPIUpdateRequest extends BaseDataAPIRequest {
+export interface DataAPIUpdateRequest {
 	action: 'update';
+	layouts: string;
 	recordId: number | string;
 	modId?: number | string;
-	fieldData: Record<string, any>;
-	/**
-	 * Data for updating related records in one or more portals.
-	 * The key is the portal's object name. The value is an array of portal row objects.
-	 * Each portal row object MUST include its own `recordId` to identify which related record to update.
-	 * Data to update should use the fully qualified `Table::Field` syntax.
-	 * e.g.
-	 * ```
-	 * 	data = await fmPromise.executeFileMakerDataAPI({
-	 * 		action: 'update',
-	 * 		fieldData: {firstName:'Bob'},
-	 * 		layouts: 'User',
-	 * 		recordId: 1,
-	 * 		portalData: {portalOne: [{'recordId': 1, 'User_Phone::phoneNumber': '4155551234', 'User_Phone_Label::color':'Taupe'}]}
-	 * 	}) // {response: {modId: "7"}, messages: [{code: "0", message: "OK"}]} = $8
-	 * ```
-	 */
+	fieldData?: Record<string, any>;
 	portalData?: Record<string, Array<{ recordId: number | string; [key: string]: any; }>>;
+	version?: 'v1' | 'v2' | 'vLatest';
 }
 
-export interface DataAPIUpdateResponse extends BaseDataAPIResponse {
+export interface DataAPIUpdateResponse {
+	messages: DataAPIMessage[];
 	response: {
 		modId: string;
 	};
@@ -167,13 +150,16 @@ export interface DataAPIUpdateResponse extends BaseDataAPIResponse {
 // =================================================================
 // ACTION: "delete"
 // =================================================================
-export interface DataAPIDeleteRequest extends BaseDataAPIRequest {
+export interface DataAPIDeleteRequest {
 	action: 'delete';
+	layouts: string;
 	recordId: number | string;
 	modId?: number | string;
+	version?: 'v1' | 'v2' | 'vLatest';
 }
 
-export interface DataAPIDeleteResponse extends BaseDataAPIResponse {
+export interface DataAPIDeleteResponse {
+	messages: DataAPIMessage[];
 	response: {}; // Empty response object
 }
 
@@ -181,25 +167,33 @@ export interface DataAPIDeleteResponse extends BaseDataAPIResponse {
 // =================================================================
 // ACTION: "metaData"
 // =================================================================
-type MetaDataRequestAllLayouts = { layouts: '' };
-type MetaDataRequestOneLayout = { layouts: string };
-type MetaDataRequestOneTable = { tables: string };
 
-export type DataAPIMetaDataRequest = {
+/** A metadata request for one or more layouts. */
+export interface DataAPIMetaDataByLayoutRequest {
 	action: 'metaData';
+	layouts: string; // Can be an empty string to request all layouts
 	version?: 'v1' | 'v2' | 'vLatest';
-} & (MetaDataRequestAllLayouts | MetaDataRequestOneLayout | MetaDataRequestOneTable);
+}
 
+/** A metadata request for a specific base table. */
+export interface DataAPIMetaDataByTableRequest {
+	action: 'metaData';
+	tables: string;
+	version?: 'v1' | 'v2' | 'vLatest';
+}
 
-export interface DataAPIMetaDataResponse extends BaseDataAPIResponse {
-	response: Record<string, any>; // The metadata response is complex, using a general object for simplicity
+// A simple union of two flat, mutually exclusive interfaces.
+export type DataAPIMetaDataRequest = DataAPIMetaDataByLayoutRequest | DataAPIMetaDataByTableRequest;
+
+export interface DataAPIMetaDataResponse {
+	messages: DataAPIMessage[];
+	response: Record<string, any>;
 }
 
 // =================================================================
-// UNION TYPES
+// UNION TYPES (Unchanged)
 // =================================================================
 
-/** A union of all possible Data API request types. */
 export type DataAPIRequest =
 	| DataAPIReadRequest
 	| DataAPICreateRequest
@@ -207,7 +201,6 @@ export type DataAPIRequest =
 	| DataAPIDeleteRequest
 	| DataAPIMetaDataRequest;
 
-/** A union of all possible Data API response types. */
 export type DataAPIResponse<T> =
 	| DataAPIReadResponse<T>
 	| DataAPICreateResponse

@@ -143,8 +143,9 @@ const server = http.createServer(async (request, response) => {
 			}
 			const shouldMinify = searchParams.get('minify') === 'true';
 			const useLiveReload = searchParams.get('liveReload') === 'true';
+			const configParam = searchParams.get('config');
 
-			let html = await buildModule(modulePath, shouldMinify);
+			let html = await buildModule(modulePath, shouldMinify, configParam);
 			if (useLiveReload) {
 				const liveReloadScript = `
 					<script>

@@ -16,6 +16,24 @@ import {
 	DataAPIUpdateResponse
 } from './types';
 
+export type {
+	DataAPICreateRequest,
+	DataAPICreateResponse,
+	DataAPIDeleteRequest,
+	DataAPIDeleteResponse,
+	DataAPIMetaDataRequest,
+	DataAPIMetaDataResponse,
+	DataAPIReadRequest,
+	DataAPIReadResponse,
+	DataAPIUpdateRequest,
+	DataAPIUpdateResponse,
+	DataAPIRecord,
+	DataAPIRecordArray,
+	DataAPIRequest,
+	DataAPIResponse
+} from './types';
+
+
 export type FMPromiseScriptRunningOption = 0 | 1 | 2 | 3 | 4 | 5;
 
 /** Options for the `performScript` call, mirroring FileMaker's `Perform Script with Option`. */
@@ -133,26 +151,82 @@ export class FMPromiseService {
 		return this.performScript('fmPromise.evaluate', stmt, options);
 	}
 
-	/** Fetches records and returns the full Data API response object, which includes a `.toRecords()` helper. */
-	async executeFileMakerDataAPI<T = Record<string, any>>(params: DataAPIReadRequest): Promise<DataAPIReadResponse<T>>;
-	/** Creates a new record. */
-	async executeFileMakerDataAPI(params: DataAPICreateRequest): Promise<DataAPICreateResponse>;
-	/** Updates an existing record. */
-	async executeFileMakerDataAPI(params: DataAPIUpdateRequest): Promise<DataAPIUpdateResponse>;
-	/** Deletes an existing record. */
-	async executeFileMakerDataAPI(params: DataAPIDeleteRequest): Promise<DataAPIDeleteResponse>;
-	/** Fetches metadata about layouts or tables. */
-	async executeFileMakerDataAPI(params: DataAPIMetaDataRequest): Promise<DataAPIMetaDataResponse>;
+	/**
+	 * Creates a new record in a FileMaker layout.
+	 * @param params The complete request object, including `action: 'create'`.
+	 * @returns A promise that resolves with the new record's recordId and modId.
+	 */
+	dataCreate(params: DataAPICreateRequest): Promise<DataAPICreateResponse> {
+		// The overload resolution of the original function handles the types,
+		// but we cast here to ensure this wrapper has a strict, non-union return type.
+		return this.executeFileMakerDataAPI(params) as Promise<DataAPICreateResponse>;
+	}
 
-	// =================================================================
-	// Single implementation for executeFileMakerDataAPI
-	// This is the actual code that runs. Its signature must be compatible with all overloads.
-	// =================================================================
-	async executeFileMakerDataAPI<T = Record<string, any>>(params: DataAPIRequest): Promise<DataAPIResponse<T>> {
+	/**
+	 * Finds records in a FileMaker layout.
+	 * @template T The expected type shape of the records' fieldData.
+	 * @param params The complete request object, including `action: 'read'`.
+	 * @returns A promise that resolves with the find response, including a `.toRecords()` helper.
+	 */
+	dataRead<T = Record<string, any>>(params: DataAPIReadRequest): Promise<DataAPIReadResponse<T>> {
+		return this.executeFileMakerDataAPI(params) as Promise<DataAPIReadResponse<T>>;
+	}
+
+	/**
+	 * Updates an existing record in a FileMaker layout.
+	 * @param params The complete request object, including `action: 'update'`.
+	 * @returns A promise that resolves with the record's new modId.
+	 */
+	dataUpdate(params: DataAPIUpdateRequest): Promise<DataAPIUpdateResponse> {
+		return this.executeFileMakerDataAPI(params) as Promise<DataAPIUpdateResponse>;
+	}
+
+	/**
+	 * Deletes a record from a FileMaker layout.
+	 * @param params The complete request object, including `action: 'delete'`.
+	 * @returns A promise that resolves with an empty response object upon success.
+	 */
+	dataDelete(params: DataAPIDeleteRequest): Promise<DataAPIDeleteResponse> {
+		return this.executeFileMakerDataAPI(params) as Promise<DataAPIDeleteResponse>;
+	}
+
+	/**
+	 * Retrieves metadata about layouts or tables.
+	 * @param params The complete request object, including `action: 'metaData'`.
+	 * @returns A promise that resolves with the requested metadata.
+	 */
+	dataMeta(params: DataAPIMetaDataRequest): Promise<DataAPIMetaDataResponse> {
+		return this.executeFileMakerDataAPI(params) as Promise<DataAPIMetaDataResponse>;
+	}
+
+	/**
+	 * The original, overloaded method for executing any FileMaker Data API command.
+	 *
+	 * **Note:** For a superior developer experience with better autocompletion and type-checking in modern IDEs,
+	 * it is **highly recommended** to use the more specific methods instead:
+	 * - `fmPromise.dataRead()`
+	 * - `fmPromise.dataCreate()`
+	 * - `fmPromise.dataUpdate()`
+	 * - `fmPromise.dataDelete()`
+	 * - `fmPromise.dataMeta()`
+	 *
+	 * This method is preserved for backwards compatibility and for advanced cases where the
+	 * `action` property is determined dynamically at runtime.
+	 *
+	 * @template T The expected type shape of the records' `fieldData` when performing a 'read' action.
+	 * @param {DataAPIRequest} params The complete Data API request object. The `action` property within this object determines which Data API type is returned.
+	 * @returns {Promise<DataAPIResponse<T>>} A promise that resolves with a response object specific to the request's `action`.
+	 * @throws {FMPromiseError} If the Data API returns an error message.
+	 * @see {@link dataRead}
+	 * @see {@link dataCreate}
+	 * @see {@link dataUpdate}
+	 * @see {@link dataDelete}
+	 * @see {@link dataMeta}
+	 */	async executeFileMakerDataAPI<T = Record<string, any>>(params: DataAPIRequest): Promise<DataAPIResponse<T>> {
 		const result = await this.performScript<any>('fmPromise.executeFileMakerDataAPI', params);
 
 		if (!result || !result.messages || !result.messages.length) {
-			throw new FMPromiseError({ code: -1, message: 'Empty data API response' });
+			throw new FMPromiseError({code: -1, message: 'Empty data API response'});
 		}
 		if (result.messages[0].code !== '0') {
 			throw new FMPromiseError(result.messages[0]);
@@ -179,9 +253,9 @@ export class FMPromiseService {
 					};
 				});
 
-				const dataInfo = this.response.dataInfo || { totalRecordCount: 0 };
+				const dataInfo = this.response.dataInfo || {totalRecordCount: 0};
 				Object.defineProperties(arr, {
-					totalRecordCount: { value: dataInfo.totalRecordCount, enumerable: false },
+					totalRecordCount: {value: dataInfo.totalRecordCount, enumerable: false},
 				});
 				return arr as DataAPIRecordArray<T>;
 			};
@@ -192,13 +266,13 @@ export class FMPromiseService {
 	}
 
 	/**
-	 * A convenience method which calls `fmPromise.executeFileMakerDataAPI({ action: 'read', ... })` and the `.toRecords()` method on the response.
+	 * A convenience method which calls `fmPromise.dataRead({ action: 'read', ... })` and the `.toRecords()` method on the response.
 	 */
 	async executeFileMakerDataAPIRecords<T>(params: DataAPIReadRequest): Promise<DataAPIRecordArray<T>> {
 		if (params.action && params.action !== 'read') {
 			throw new FMPromiseError({message: 'executeFileMakerDataAPIRecords only supports the \'read\' action.'});
 		}
-		const response = await this.executeFileMakerDataAPI<T>(params);
+		const response = await this.dataRead<T>(params);
 		return response.toRecords();
 	}
 
@@ -237,6 +311,9 @@ export class FMPromiseService {
 
 		if (rawData === '' || rawData === null || rawData === undefined) {
 			return [];
+		}
+		if (rawData.startsWith('? ERROR')) {
+			throw new Error(rawData);
 		}
 		return rawData.split(rowDelim).map((r) => r.split(colDelim));
 	}
@@ -307,6 +384,7 @@ declare global {
 		fmPromise_Resolve: (promiseId: number, result: any) => void;
 		fmPromise_Reject: (promiseId: number, errorString: string) => void;
 		FMPROMISE_WEB_VIEWER_NAME?: string;
+		FMPROMISE_CONFIG?: any;
 	}
 }
 

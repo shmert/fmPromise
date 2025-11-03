@@ -1,38 +1,29 @@
-# fmPromise: a Richer JavaScript Web Viewer Integration
+# @360works/fmpromise
 
-FileMaker 19 has added the ability to call FileMaker scripts from your JavaScript, as well as executing a JavaScript function from a FileMaker script.
-This allows for integration between FileMaker and JavaScript/WebViewer, but has some clunky bits that we can make better.
+A modern JavaScript toolkit for FileMaker Web Viewers. `fmPromise` bridges the gap between FileMaker and modern web development with a promise-based API, a live-reloading dev server, and a powerful, type-safe wrapper for the FileMaker Data
+API. In addition, fmPromise provides a means for converting multi-file html apps to single-file, minified html payloads which can be stored in your database and easily deployed.
 
-* Every call from JavaScript to a FileMaker script needs a public JavaScript function to receive the script response, and it is the responsibility of the Script to call that function.
-* All data coming back from FileMaker is a `string`
-* Debugging JavaScript errors is very difficult without browser-based dev tools
-* The `window.FileMaker` object is not available right when the page loads, so you need a `window.setTimeout()` to wait for it to become available if you want to populate your web viewer using a script call.
-
-**fmPromise** is designed to address these shortcomings, and help you utilize web viewers in your solution with the minimum amount of fuss.
-
-Instead of callback-based JavaScript, `fmPromise` returns a [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) for cleaner, more modern code.
+Instead of callback-based JavaScript, `fmPromise` methods return a [Promise](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise) for cleaner, more modern code.
 
 Add in the syntactic sugar of [async/await](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function) and you can have this:
 
 ```js
-async function submitMyOrder(orderDetails) {
-	const progressDialog = showProgressDialog('Submitting...');
-	try {
-		const submitResult = await fmPromise.performScript('Submit Order from WebViewer', orderDetails);
-		showSubmitResult(submitResult);
-	} catch (error) {
-		showError('Could not send order: ' + error);
-	} finally {
-		progressDialog.close();
-	}
-}
+const records = (await fmPromise.executeFileMakerDataAPI({
+	action: 'read',
+	layouts: 'Users',
+	query: [{status: 'active'}]
+})).toRecords();
+
+console.log(`Found ${records.foundCount} records.`);
+const firstUser = records[0];
+console.log(firstUser.firstName);
 ```
 
 In addition, fmPromise offers more convenient data structures for returned values. 
 
 `fmPromise.executeSQL` return an array of arrays, instead of a string, and supports safe inlining of parameters. 
 
-`fmPromise.executeFileMakerDataAPIRecords`  returns an array of objects, with portal data as attributes.
+`fmPromise.executeFileMakerDataAPI({...}).toRecords()`  returns an array of objects, with portal data arrays as attributes.
 
 # Using fmPromise
 
@@ -55,7 +46,7 @@ word "ERROR".
 
 `fmPromise.executeFileMakerDataAPIRecords({layouts:'Team', limit:2})` Execute the data API, returning an array of Objects. Each object in the resulting array will have non-enumerable `recordId` and `modid` attributes. `portalData` arrays for each record will be inlined with other attributes, using the portal table name as the key.
 
-### Additional benefits
+# Additional benefits
 
 * FileMaker worker scripts don't need to know anything about your web viewers, they simply exit with a (preferably JSON) result.
 * FileMaker Scripts can return an "Error …" result, which will be used to reject the script call's promise.

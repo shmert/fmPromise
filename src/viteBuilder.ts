@@ -4,7 +4,7 @@ import path from 'path';
 import type {OutputAsset} from 'rollup';
 
 // Update the function signature to accept the minify flag
-export const buildModule = async (moduleHtmlPath: string, minify: boolean): Promise<string> => {
+export const buildModule = async (moduleHtmlPath: string, minify: boolean, configJsonString?: string | null): Promise<string> => {
 	const absoluteInputFile = path.resolve(process.cwd(), 'src', moduleHtmlPath);
 	const buildRoot = path.dirname(absoluteInputFile);
 
@@ -37,5 +37,9 @@ export const buildModule = async (moduleHtmlPath: string, minify: boolean): Prom
 		throw new Error(`Vite build did not produce a valid HTML file for: ${moduleHtmlPath}`);
 	}
 
-	return htmlAsset.source;
+	let finalHtml = htmlAsset.source;
+	if (configJsonString) {
+		finalHtml += `<script>window.FMPROMISE_CONFIG = ${configJsonString};</script>`;
+	}
+	return finalHtml;
 };
