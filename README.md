@@ -1,3 +1,5 @@
+**NOTE: development on fmPromise is stopping. It will continue to work as-is, but consider looking at ProofKit as a replacement which is being actively maintained.**
+
 # @360works/fmpromise
 
 A modern JavaScript toolkit for FileMaker Web Viewers. `fmPromise` bridges the gap between FileMaker and modern web development with a promise-based API, a live-reloading dev server, and a powerful, type-safe wrapper for the FileMaker Data
